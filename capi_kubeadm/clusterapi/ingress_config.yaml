@@ -1,0 +1,8 @@
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcp-services
+  namespace: cloud
+data:
+  "30443": "cloud/kubeadm-ubuntu-calico-dist-1-lb:6443"
