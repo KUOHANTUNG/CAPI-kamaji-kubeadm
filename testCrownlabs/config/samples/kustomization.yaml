@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- crownlabs_v1alpha2_template.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

@@ -1,0 +1,9 @@
+apiVersion: crownlabs.polito.it/v1alpha2
+kind: Template
+metadata:
+  labels:
+    app.kubernetes.io/name: testcrownlabs
+    app.kubernetes.io/managed-by: kustomize
+  name: template-sample
+spec:
+  # TODO(user): Add fields here
