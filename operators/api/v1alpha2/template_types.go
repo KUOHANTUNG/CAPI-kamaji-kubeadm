@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +kubebuilder:validation:Enum="VirtualMachine";"Container";"CloudVM";"Standalone"
+// +kubebuilder:validation:Enum="VirtualMachine";"Container";"CloudVM";"Standalone";"Cluster"
 
 // EnvironmentType is an enumeration of the different types of environments that
 // can be instantiated in CrownLabs.
@@ -41,7 +41,7 @@ const (
 	// ClassStandalone -> the environment is constituted by a Docker Container exposing a web service through an http interface.
 	ClassStandalone EnvironmentType = "Standalone"
 	//ClassCluster -> the environment is the constituted by a Cluster
-	ClassCluster EnvironmentType = "Clster"
+	ClassCluster EnvironmentType = "Cluster"
 	// ModeStandard -> Normal operation (authentication, ssh, files access).
 	ModeStandard EnvironmentMode = "Standard"
 	// ModeExam -> Restricted access (no authentication, no mydrive access).
@@ -137,12 +137,7 @@ type Environment struct {
 	NodeSelector *map[string]string `json:"nodeSelector,omitempty"`
 
 	//Cluster
-	Cluster ClusterTemplate `json:"cluster"`
-
-	// +kubebuilder:default=false
-	// +optional
-	// Whether the instamce is a cluster node
-	IsClusterNode bool `json:"isClusterNode,omitempty"`
+	Cluster ClusterTemplate `json:"cluster,omitempty"`
 }
 
 // cluster defines the characteristics of a cluster composing the Template.

@@ -211,6 +211,7 @@ spec:
                       - Container
                       - CloudVM
                       - Standalone
+                      - Cluster
                       type: string
                     guiEnabled:
                       default: true
@@ -221,10 +222,6 @@ spec:
                       description: The VM or container to be started when instantiating
                         the environment.
                       type: string
-                    isClusterNode:
-                      default: false
-                      description: Whether the instamce is a cluster node
-                      type: boolean
                     mode:
                       default: Standard
                       description: The mode associated with the environment (Standard,
@@ -349,7 +346,6 @@ spec:
                         volume (when needed)
                       type: string
                   required:
-                  - cluster
                   - environmentType
                   - image
                   - mountMyDriveVolume

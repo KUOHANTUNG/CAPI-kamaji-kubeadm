@@ -1,0 +1,36 @@
+# config/samples/crownlabs_v1alpha2_template.yaml
+apiVersion: crownlabs.polito.it/v1alpha2
+kind: Template
+metadata:
+  name: template-sample
+spec:
+  prettyName: "Sample Template"
+  description: "This is an example."
+  environmentList:
+  - name: web
+    image: nginx
+    environmentType: Cluster
+    guiEnabled: true
+    persistent: false
+    resources:
+      cpu: 1
+      reservedCPUPercentage: 50
+      memory: 512Mi
+    mode: Standard
+    mountMyDriveVolume: true
+    cluster:
+      name: cluster-demo
+      version: v1.32.1
+      serviceType: ClusterIP
+      clusterNetwork:
+        pods:
+          cidrBlocks: ["10.244.0.0/16"]
+        services:
+          cidrBlocks: ["10.96.0.0/12"]
+        cni: calico
+      controlPlane:
+        provider: kubeadm
+        certSANs: ["controlplane.local"]
+        replicas: 1
+      machineDeployment:
+        replicas: 1
