@@ -15,12 +15,11 @@
 package v1alpha2
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +kubebuilder:validation:Enum="VirtualMachine";"Container";"CloudVM";"Standalone"
+// +kubebuilder:validation:Enum="VirtualMachine";"Container";"CloudVM";"Standalone";"Cluster"
 
 // EnvironmentType is an enumeration of the different types of environments that
 // can be instantiated in CrownLabs.
@@ -42,22 +41,13 @@ const (
 	// ClassStandalone -> the environment is constituted by a Docker Container exposing a web service through an http interface.
 	ClassStandalone EnvironmentType = "Standalone"
 	//ClassCluster -> the environment is the constituted by a Cluster
-	ClassCluster EnvironmentType = "Clster"
+	ClassCluster EnvironmentType = "Cluster"
 	// ModeStandard -> Normal operation (authentication, ssh, files access).
 	ModeStandard EnvironmentMode = "Standard"
 	// ModeExam -> Restricted access (no authentication, no mydrive access).
 	ModeExam EnvironmentMode = "Exam"
 	// ModeExercise -> Restricted access (no authentication, no mydrive access).
 	ModeExercise EnvironmentMode = "Exercise"
-)
-
-// ClusterNodeRole is an enumeration of the role in which associated instances should be started:
-
-type ClusterNodeRole string
-
-const (
-	ClusterRoleMaster ClusterNodeRole = "Master"
-	ClusterRoleWorker ClusterNodeRole = "Worker"
 )
 
 // TemplateSpec is the specification of the desired state of the Template.
@@ -147,12 +137,7 @@ type Environment struct {
 	NodeSelector *map[string]string `json:"nodeSelector,omitempty"`
 
 	//Cluster
-	Cluster ClusterTemplate `json:"cluster"`
-
-	// +kubebuilder:default=false
-	// +optional
-	// Whether the instamce is a cluster node
-	IsClusterNode bool `json:"isClusterNode,omitempty"`
+	Cluster ClusterTemplate `json:"cluster,omitempty"`
 }
 
 // cluster defines the characteristics of a cluster composing the Template.
@@ -166,8 +151,8 @@ type ClusterTemplate struct {
 	// The controlplane is used to control the cluster
 	ControlPlane ControlPlaneRef `json:"controlPlane"`
 
-	// The cluster service type
-	ServiceType corev1.ServiceType `json:"serviceType"`
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer;ExternalName
+	ServiceType string `json:"serviceType,omitempty"`
 
 	// The version of kubernetes used in cluster
 	Version string `json:"version"`
@@ -200,9 +185,6 @@ type CIDR struct {
 
 // The ControlPlaneRef defines the characteristics of controlplane
 type ControlPlaneRef struct {
-	// The name identifying the specific controlplane.
-	Name string `json:"name"`
-
 	// The controlplane provider
 	Provider ControlPlaneProvider `json:"provider"`
 
@@ -225,8 +207,6 @@ const (
 
 // The MachineDeployment specifies characheristics about worker
 type MachineDeployment struct {
-	// The name of deployment
-	Name string `json:"name"`
 
 	// +kubebuilder:validation:Minimum:=1
 	// +kubebuilder:validation:Maximum:=100
