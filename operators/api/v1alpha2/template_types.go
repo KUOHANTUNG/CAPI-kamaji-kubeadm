@@ -146,7 +146,7 @@ type ClusterTemplate struct {
 	Name string `json:"name"`
 
 	// The network of cluster including pods and services
-	ClusterNet ClusterNetwork `json:"clusterNetwork"`
+	ClusterNet ClusterNetwork `json:"clusterNet"`
 
 	// The controlplane is used to control the cluster
 	ControlPlane ControlPlaneRef `json:"controlPlane"`

@@ -21,23 +21,7 @@ import (
 )
 
 func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) error {
-	log := ctrl.LoggerFrom(ctx)
-	environment := clctx.EnvironmentFrom(ctx)
 
-	err := r.EnforceInstanceExposition(ctx)
-	if err != nil {
-		log.Error(err, "failed to enforce the instance exposition objects")
-		return err
-	}
-	if environment.Persistent {
-		r.enforceCluster(ctx)
-		r.enforceInfra(ctx)
-		r.enforceControlPlane(ctx)
-		r.enforceMachineDeployment(ctx)
-		r.enforcekubevirtmachine(ctx)
-		r.enforcebootstrap(ctx)
-		return nil
-	}
 	r.enforceCluster(ctx)
 	r.enforceInfra(ctx)
 	r.enforceControlPlane(ctx)
@@ -57,12 +41,21 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 	cl := &capiv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-cluster", cluster.Name), Namespace: instance.Namespace}}
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, cl, func() error {
 		if cl.CreationTimestamp.IsZero() {
+			if cl.Spec.ClusterNetwork == nil {
+				cl.Spec.ClusterNetwork = &capiv1.ClusterNetwork{}
+			}
+			if cl.Spec.ControlPlaneRef == nil {
+				cl.Spec.ControlPlaneRef = &corev1.ObjectReference{}
+			}
+			if cl.Spec.InfrastructureRef == nil {
+				cl.Spec.InfrastructureRef = &corev1.ObjectReference{}
+			}
 			// set the network
-			cl.Spec.ClusterNetwork.Pods.CIDRBlocks = clusternet.Pods.CIDRBlocks
-			cl.Spec.ClusterNetwork.Services.CIDRBlocks = clusternet.Services.CIDRBlocks
+			cl.Spec.ClusterNetwork.Pods = &capiv1.NetworkRanges{CIDRBlocks: clusternet.Pods.CIDRBlocks}
+			cl.Spec.ClusterNetwork.Services = &capiv1.NetworkRanges{CIDRBlocks: clusternet.Pods.CIDRBlocks}
 			// set the controlplane
 			cl.Spec.ControlPlaneRef.APIVersion = controlplanev1.GroupVersion.String()
-			cl.Spec.ControlPlaneRef.Kind = fmt.Sprintf("%s-ControlPlane", controlplane.Provider)
+			cl.Spec.ControlPlaneRef.Kind = fmt.Sprintf("%sControlPlane", controlplane.Provider)
 			cl.Spec.ControlPlaneRef.Name = fmt.Sprintf("%s-control-plane", cluster.Name)
 			// set the infrastructure
 			cl.Spec.InfrastructureRef.APIVersion = infrav1.GroupVersion.String()
@@ -133,7 +126,7 @@ func (r *InstanceReconciler) enforceControlPlane(ctx context.Context) error {
 		return ctrl.SetControllerReference(instance, cp, r.Scheme)
 	})
 	if err != nil {
-		log.Error(err, "failed to enforce controlplan", "controlplan", klog.KObj(cp))
+		log.Error(err, "failed to enforce controlplane", "controlplane", klog.KObj(cp))
 		return err
 	}
 	log.V(utils.FromResult(res)).Info("ControlPlane enforced", "ControlPlane", klog.KObj(cp), "result", res)
@@ -148,7 +141,8 @@ func (r *InstanceReconciler) enforceMachineDeployment(ctx context.Context) error
 	machinedeployment := cluster.MachineDeploy
 	md := &capiv1.MachineDeployment{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-md", cluster.Name), Namespace: instance.Namespace}}
 	_, err := ctrl.CreateOrUpdate(ctx, r.Client, md, func() error {
-		md.Spec.ClusterName = cluster.Name
+		md.Spec.ClusterName = fmt.Sprintf("%s-cluster", cluster.Name)
+		md.Spec.Template.Spec.ClusterName = fmt.Sprintf("%s-cluster", cluster.Name)
 		md.Spec.Replicas = pt(int32(machinedeployment.Replicas))
 		md.Spec.Template.Spec.Bootstrap.ConfigRef = &corev1.ObjectReference{
 			APIVersion: bootstrapv1.GroupVersion.String(), Kind: "KubeadmConfigTemplate",
@@ -210,7 +204,7 @@ func (r *InstanceReconciler) enforcekubevirtmachine(ctx context.Context) error {
 
 	// controlplane part
 	if controlplane.Provider == v1alpha2.ProviderKubeadm {
-		wmcp := infrav1.KubevirtMachineTemplate{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-control-plane-machine"), Namespace: instance.Namespace}}
+		wmcp := infrav1.KubevirtMachineTemplate{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-control-plane-machine", cluster.Name), Namespace: instance.Namespace}}
 		res, err := ctrl.CreateOrUpdate(ctx, r.Client, &wmcp, func() error {
 			if wmcp.CreationTimestamp.IsZero() {
 				wmcp.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"

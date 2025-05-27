@@ -91,7 +91,7 @@ spec:
                     cluster:
                       description: Cluster
                       properties:
-                        clusterNetwork:
+                        clusterNet:
                           description: The network of cluster including pods and services
                           properties:
                             cni:
@@ -167,7 +167,7 @@ spec:
                           description: The version of kubernetes used in cluster
                           type: string
                       required:
-                      - clusterNetwork
+                      - clusterNet
                       - controlPlane
                       - name
                       - version
