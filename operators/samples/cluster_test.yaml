@@ -2,24 +2,24 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: tenant-john-doe
+  name: tenant-123
   labels:
     crownlabs.polito.it/operator-selector: local
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: workspace-tea
+  name: workspace-123
 ---
 apiVersion: crownlabs.polito.it/v1alpha2
 kind: Instance
 metadata:
   name: green-tea-6831
-  namespace: tenant-john-doe
+  namespace: tenant-123
 spec:
   template.crownlabs.polito.it/TemplateRef:
     name: green-tea
-    namespace: workspace-tea
+    namespace: workspace-123
   tenant.crownlabs.polito.it/TenantRef:
     name: john.doe
 ---
@@ -46,7 +46,7 @@ apiVersion: crownlabs.polito.it/v1alpha2
 kind: Template
 metadata:
   name: green-tea
-  namespace: workspace-tea
+  namespace: workspace-123
 spec:
   prettyName: Green Tea
   description: "This is an example."
@@ -63,7 +63,7 @@ spec:
     mode: Standard
     mountMyDriveVolume: false
     cluster:
-      name: cluster-demo
+      name: testdemo
       version: v1.32.1
       serviceType: ClusterIP
       clusterNet:
