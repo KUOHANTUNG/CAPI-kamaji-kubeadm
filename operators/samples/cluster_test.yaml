@@ -55,11 +55,12 @@ spec:
     image: harbor.crownlabs.polito.it/capk/ubuntu-2204-container-disk:v1.30.3
     environmentType: Cluster
     guiEnabled: true
-    persistent: false
+    persistent: true
     resources:
-      cpu: 2
-      memory: 2G
-      reservedCPUPercentage: 25
+        cpu: 2
+        memory: 2G
+        disk: 4G
+        reservedCPUPercentage: 25
     mode: Standard
     mountMyDriveVolume: false
     cluster:

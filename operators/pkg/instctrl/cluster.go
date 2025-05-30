@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog/v2"
-	virtv1 "kubevirt.io/api/core/v1"
+	"k8s.io/utils/ptr"
 	infrav1 "sigs.k8s.io/cluster-api-provider-kubevirt/api/v1alpha1"
 	capiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
@@ -206,17 +206,15 @@ func (r *InstanceReconciler) enforceKubevirtMachine(ctx context.Context) error {
 	// worker template
 	wmworker := infrav1.KubevirtMachineTemplate{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-md-worker", cluster.Name), Namespace: instance.Namespace}}
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, &wmworker, func() error {
-		// align bootstrap
-		wmworker.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"
-		// build VM spec
-		vmSpec := forge.VirtualMachineSpec(instance, environment)
-		vmSpec.RunStrategy = pt(virtv1.RunStrategyAlways)
-		if len(vmSpec.DataVolumeTemplates) > 0 {
-			dvName := vmSpec.DataVolumeTemplates[0].ObjectMeta.Name
-			vmSpec.Template.Spec.Volumes = append(vmSpec.Template.Spec.Volumes, virtv1.Volume{Name: dvName, VolumeSource: virtv1.VolumeSource{DataVolume: &virtv1.DataVolumeSource{Name: dvName}}})
+		if wmworker.CreationTimestamp.IsZero() {
+			wmworker.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"
+
+			vmSpec := forge.VirtualMachineSpec(instance, environment)
+			wmworker.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
 		}
-		wmworker.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
+
 		// label
+		wmworker.Spec.Template.Spec.VirtualMachineTemplate.Spec.Running = ptr.To(instance.Spec.Running)
 		if wmworker.Labels == nil {
 			wmworker.Labels = map[string]string{}
 		}
@@ -233,14 +231,14 @@ func (r *InstanceReconciler) enforceKubevirtMachine(ctx context.Context) error {
 	if controlplane.Provider == v1alpha2.ProviderKubeadm {
 		wmcp := infrav1.KubevirtMachineTemplate{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-control-plane-machine", cluster.Name), Namespace: instance.Namespace}}
 		res, err := ctrl.CreateOrUpdate(ctx, r.Client, &wmcp, func() error {
-			wmcp.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"
-			vmSpec := forge.VirtualMachineSpec(instance, environment)
-			vmSpec.RunStrategy = pt(virtv1.RunStrategyAlways)
-			if len(vmSpec.DataVolumeTemplates) > 0 {
-				dvName := vmSpec.DataVolumeTemplates[0].ObjectMeta.Name
-				vmSpec.Template.Spec.Volumes = append(vmSpec.Template.Spec.Volumes, virtv1.Volume{Name: dvName, VolumeSource: virtv1.VolumeSource{DataVolume: &virtv1.DataVolumeSource{Name: dvName}}})
+
+			if wmcp.CreationTimestamp.IsZero() {
+				wmcp.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"
+
+				vmSpec := forge.VirtualMachineSpec(instance, environment)
+				wmcp.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
 			}
-			wmcp.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
+			wmcp.Spec.Template.Spec.VirtualMachineTemplate.Spec.Running = ptr.To(instance.Spec.Running)
 			if wmcp.Labels == nil {
 				wmcp.Labels = map[string]string{}
 			}
