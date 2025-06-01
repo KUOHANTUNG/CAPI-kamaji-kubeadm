@@ -5,24 +5,33 @@ import (
 	"fmt"
 
 	"github.com/netgroup-polito/CrownLabs/operators/api/v1alpha2"
+	clv1alpha2 "github.com/netgroup-polito/CrownLabs/operators/api/v1alpha2"
 	clctx "github.com/netgroup-polito/CrownLabs/operators/pkg/context"
 	"github.com/netgroup-polito/CrownLabs/operators/pkg/forge"
 	"github.com/netgroup-polito/CrownLabs/operators/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	intstr "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
+	virtv1 "kubevirt.io/api/core/v1"
 	infrav1 "sigs.k8s.io/cluster-api-provider-kubevirt/api/v1alpha1"
 	capiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // InstanceReconciler enforces the Cluster API environment for a CrownLabs instance
 func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) error {
-	fmt.Println("123")
+	// log := ctrl.LoggerFrom(ctx)
+	// environment := clctx.EnvironmentFrom(ctx)
+	// if environment.Mode == clv1alpha2.ModeStandard {
+	// 	if err := r.EnforceCloudInitSecret(ctx); err != nil {
+	// 		log.Error(err, "failed to enforce the cloud-init secret existence")
+	// 		return err
+	// 	}
+	// }
 	r.enforceCluster(ctx)
 	r.enforceInfra(ctx)
 	r.enforceControlPlane(ctx)
@@ -54,29 +63,27 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 		if cl.Spec.ControlPlaneRef == nil {
 			cl.Spec.ControlPlaneRef = &corev1.ObjectReference{}
 		}
-		// align infrastructure and controlPlane refs
-		cl.Spec.InfrastructureRef.APIVersion = infrav1.GroupVersion.String()
-		cl.Spec.InfrastructureRef.Kind = "KubevirtCluster"
-		cl.Spec.InfrastructureRef.Name = fmt.Sprintf("%s-infra", cluster.Name)
+		if cl.CreationTimestamp.IsZero() {
+			// align infrastructure and controlPlane refs
+			cl.Spec.InfrastructureRef.APIVersion = infrav1.GroupVersion.String()
+			cl.Spec.InfrastructureRef.Kind = "KubevirtCluster"
+			cl.Spec.InfrastructureRef.Name = fmt.Sprintf("%s-infra", cluster.Name)
 
-		cl.Spec.ControlPlaneRef.APIVersion = controlplanev1.GroupVersion.String()
-		if controlplane.Provider == v1alpha2.ProviderKubeadm {
-			cl.Spec.ControlPlaneRef.Kind = "KubeadmControlPlane"
-		} else {
-			cl.Spec.ControlPlaneRef.Kind = "KamajiControlPlane"
-		}
-		cl.Spec.ControlPlaneRef.Name = fmt.Sprintf("%s-control-plane", cluster.Name)
+			cl.Spec.ControlPlaneRef.APIVersion = controlplanev1.GroupVersion.String()
+			if controlplane.Provider == v1alpha2.ProviderKubeadm {
+				cl.Spec.ControlPlaneRef.Kind = "KubeadmControlPlane"
+			} else {
+				cl.Spec.ControlPlaneRef.Kind = "KamajiControlPlane"
+			}
+			cl.Spec.ControlPlaneRef.Name = fmt.Sprintf("%s-control-plane", cluster.Name)
 
-		// align network and endpoint
-		cl.Spec.ClusterNetwork = &capiv1.ClusterNetwork{
-			Pods:     &capiv1.NetworkRanges{CIDRBlocks: clusternet.Pods.CIDRBlocks},
-			Services: &capiv1.NetworkRanges{CIDRBlocks: clusternet.Services.CIDRBlocks},
+			// align network and endpoint
+			cl.Spec.ClusterNetwork = &capiv1.ClusterNetwork{
+				Pods:     &capiv1.NetworkRanges{CIDRBlocks: clusternet.Pods.CIDRBlocks},
+				Services: &capiv1.NetworkRanges{CIDRBlocks: clusternet.Services.CIDRBlocks},
+			}
 		}
-		cl.Spec.ControlPlaneEndpoint = capiv1.APIEndpoint{
-			Host: fmt.Sprintf("%s.%s.svc.cluster.local", cluster.Name, instance.Namespace),
-			Port: 6443,
-		}
-
+		cl.SetLabels(forge.InstanceObjectLabels(cl.GetLabels(), instance))
 		return ctrl.SetControllerReference(instance, cl, r.Scheme)
 	})
 	if err != nil {
@@ -100,11 +107,13 @@ func (r *InstanceReconciler) enforceInfra(ctx context.Context) error {
 		},
 	}
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, infra, func() error {
-		infra.Spec.ControlPlaneServiceTemplate.Spec.Type = corev1.ServiceType(cluster.ServiceType)
+		if infra.CreationTimestamp.IsZero() {
+			infra.Spec.ControlPlaneServiceTemplate.Spec.Type = corev1.ServiceType(cluster.ServiceType)
+		}
 		if infra.Labels == nil {
 			infra.Labels = map[string]string{}
 		}
-		infra.Labels[capiv1.ClusterNameLabel] = fmt.Sprintf("%s-cluster", cluster.Name)
+		infra.SetLabels(forge.InstanceObjectLabels(infra.GetLabels(), instance))
 		return nil
 	})
 	if err != nil {
@@ -130,27 +139,30 @@ func (r *InstanceReconciler) enforceControlPlane(ctx context.Context) error {
 		},
 	}
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, cp, func() error {
-		cp.Spec.Version = cluster.Version
-		cp.Spec.Replicas = pt(int32(controlplane.Replicas))
-		// align kubeadm specs
-		cp.Spec.KubeadmConfigSpec.ClusterConfiguration = &bootstrapv1.ClusterConfiguration{
-			Networking: bootstrapv1.Networking{
-				DNSDomain:     fmt.Sprintf("%s.%s.local", instance.Name, instance.Namespace),
-				PodSubnet:     clusternet.Pods.CIDRBlocks[0],
-				ServiceSubnet: clusternet.Services.CIDRBlocks[0],
-			},
+
+		if cp.CreationTimestamp.IsZero() {
+			cp.Spec.Version = cluster.Version
+			cp.Spec.Replicas = pt(int32(controlplane.Replicas))
+			// align kubeadm specs
+			cp.Spec.KubeadmConfigSpec.ClusterConfiguration = &bootstrapv1.ClusterConfiguration{
+				Networking: bootstrapv1.Networking{
+					DNSDomain:     fmt.Sprintf("%s.%s.local", instance.Name, instance.Namespace),
+					PodSubnet:     clusternet.Pods.CIDRBlocks[0],
+					ServiceSubnet: clusternet.Services.CIDRBlocks[0],
+				},
+			}
+			cp.Spec.KubeadmConfigSpec.InitConfiguration = &bootstrapv1.InitConfiguration{
+				NodeRegistration: bootstrapv1.NodeRegistrationOptions{CRISocket: "unix:///var/run/containerd/containerd.sock"},
+			}
+			cp.Spec.KubeadmConfigSpec.ClusterConfiguration.APIServer.CertSANs = controlplane.CertSANs
+			cp.Spec.KubeadmConfigSpec.JoinConfiguration = &bootstrapv1.JoinConfiguration{NodeRegistration: bootstrapv1.NodeRegistrationOptions{CRISocket: "unix:///var/run/containerd/containerd.sock"}}
+			// infra ref
+			cp.Spec.MachineTemplate.InfrastructureRef = corev1.ObjectReference{APIVersion: infrav1.GroupVersion.String(), Kind: "KubevirtMachineTemplate", Name: fmt.Sprintf("%s-control-plane-machine", cluster.Name)}
 		}
-		cp.Spec.KubeadmConfigSpec.InitConfiguration = &bootstrapv1.InitConfiguration{
-			NodeRegistration: bootstrapv1.NodeRegistrationOptions{CRISocket: "unix:///var/run/containerd/containerd.sock"},
-		}
-		cp.Spec.KubeadmConfigSpec.ClusterConfiguration.APIServer.CertSANs = controlplane.CertSANs
-		cp.Spec.KubeadmConfigSpec.JoinConfiguration = &bootstrapv1.JoinConfiguration{NodeRegistration: bootstrapv1.NodeRegistrationOptions{CRISocket: "unix:///var/run/containerd/containerd.sock"}}
-		// infra ref
-		cp.Spec.MachineTemplate.InfrastructureRef = corev1.ObjectReference{APIVersion: infrav1.GroupVersion.String(), Kind: "KubevirtMachineTemplate", Name: fmt.Sprintf("%s-control-plane-machine", cluster.Name)}
 		if cp.Labels == nil {
 			cp.Labels = map[string]string{}
 		}
-		cp.Labels[capiv1.ClusterNameLabel] = fmt.Sprintf("%s-cluster", cluster.Name)
+		cp.SetLabels(forge.InstanceObjectLabels(cp.GetLabels(), instance))
 		return nil
 	})
 	if err != nil {
@@ -178,14 +190,10 @@ func (r *InstanceReconciler) enforceMachineDeployment(ctx context.Context) error
 		md.Spec.Template.Spec.Bootstrap.ConfigRef = &corev1.ObjectReference{APIVersion: bootstrapv1.GroupVersion.String(), Kind: "KubeadmConfigTemplate", Name: fmt.Sprintf("%s-md-bootstrap", cluster.Name)}
 		md.Spec.Template.Spec.InfrastructureRef = corev1.ObjectReference{APIVersion: infrav1.GroupVersion.String(), Kind: "KubevirtMachineTemplate", Name: fmt.Sprintf("%s-md-worker", cluster.Name)}
 		md.Spec.Template.Spec.Version = &cluster.Version
-		// rolling strategy
-		maxSurge := intstr.FromInt(1)
-		maxUnavailable := intstr.FromInt(0)
-		md.Spec.Strategy = &capiv1.MachineDeploymentStrategy{Type: capiv1.RollingUpdateMachineDeploymentStrategyType, RollingUpdate: &capiv1.MachineRollingUpdateDeployment{MaxSurge: &maxSurge, MaxUnavailable: &maxUnavailable}}
 		if md.Labels == nil {
 			md.Labels = map[string]string{}
 		}
-		md.Labels[capiv1.ClusterNameLabel] = fmt.Sprintf("%s-cluster", cluster.Name)
+		md.SetLabels(forge.InstanceObjectLabels(md.GetLabels(), instance))
 		return nil
 	})
 	if err != nil {
@@ -209,10 +217,9 @@ func (r *InstanceReconciler) enforceKubevirtMachine(ctx context.Context) error {
 		if wmworker.CreationTimestamp.IsZero() {
 			wmworker.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"
 
-			vmSpec := forge.VirtualMachineSpec(instance, environment)
+			vmSpec := ClusterVMSpec(environment)
 			wmworker.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
 		}
-
 		// label
 		wmworker.Spec.Template.Spec.VirtualMachineTemplate.Spec.Running = ptr.To(instance.Spec.Running)
 		if wmworker.Labels == nil {
@@ -235,10 +242,10 @@ func (r *InstanceReconciler) enforceKubevirtMachine(ctx context.Context) error {
 			if wmcp.CreationTimestamp.IsZero() {
 				wmcp.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"
 
-				vmSpec := forge.VirtualMachineSpec(instance, environment)
+				vmSpec := ClusterVMSpec(environment)
 				wmcp.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
 			}
-			wmcp.Spec.Template.Spec.VirtualMachineTemplate.Spec.Running = ptr.To(instance.Spec.Running)
+
 			if wmcp.Labels == nil {
 				wmcp.Labels = map[string]string{}
 			}
@@ -250,6 +257,21 @@ func (r *InstanceReconciler) enforceKubevirtMachine(ctx context.Context) error {
 			return err
 		}
 		log.V(utils.FromResult(res)).Info("virtualmachine-control-plane enforced")
+		vm := virtv1.VirtualMachine{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-control-plane-machine", cluster.Name), Namespace: instance.Namespace}}
+		vmi := virtv1.VirtualMachineInstance{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-control-plane-machine", cluster.Name), Namespace: instance.Namespace}}
+		if err = r.Get(ctx, client.ObjectKeyFromObject(&vmi), &vmi); client.IgnoreNotFound(err) != nil {
+			log.Error(err, "failed to retrieve virtualmachineinstance", "virtualmachineinstance", klog.KObj(&vm))
+			return err
+		} else if err != nil {
+			klog.Infof("VMI %s doesn't exist", instance.Name)
+		}
+		phase := r.RetrievePhaseFromVM(&vm, &vmi)
+
+		if phase != instance.Status.Phase {
+			log.Info("phase changed", "virtualmachine", klog.KObj(&vm),
+				"previous", string(instance.Status.Phase), "current", string(phase))
+			instance.Status.Phase = phase
+		}
 	}
 	return nil
 }
@@ -268,7 +290,7 @@ func (r *InstanceReconciler) enforceBootstrap(ctx context.Context) error {
 		if bt.Labels == nil {
 			bt.Labels = map[string]string{}
 		}
-		bt.Labels[capiv1.ClusterNameLabel] = fmt.Sprintf("%s-cluster", cluster.Name)
+		bt.SetLabels(forge.InstanceObjectLabels(bt.GetLabels(), instance))
 		return nil
 	})
 	if err != nil {
@@ -281,3 +303,40 @@ func (r *InstanceReconciler) enforceBootstrap(ctx context.Context) error {
 
 // pt is a generic pointer helper
 func pt[T any](v T) *T { return &v }
+func ClusterVMSpec(environment *clv1alpha2.Environment) virtv1.VirtualMachineSpec {
+
+	return virtv1.VirtualMachineSpec{
+		RunStrategy: ptr.To(virtv1.RunStrategyAlways),
+		Template: &virtv1.VirtualMachineInstanceTemplateSpec{
+			Spec: ClusterVMISpec(environment),
+		},
+	}
+}
+func ClusterVMISpec(environment *clv1alpha2.Environment) virtv1.VirtualMachineInstanceSpec {
+	return virtv1.VirtualMachineInstanceSpec{
+		Domain: ClusterVMDomain(environment),
+		Volumes: []virtv1.Volume{
+			{
+				Name: "containervolume",
+				VolumeSource: virtv1.VolumeSource{
+					ContainerDisk: &virtv1.ContainerDiskSource{
+						Image: environment.Image,
+					},
+				},
+			},
+		},
+		EvictionStrategy: ptr.To(virtv1.EvictionStrategyExternal),
+	}
+}
+
+func ClusterVMDomain(environment *clv1alpha2.Environment) virtv1.DomainSpec {
+	return virtv1.DomainSpec{
+		CPU:       &virtv1.CPU{Cores: environment.Resources.CPU},
+		Memory:    &virtv1.Memory{Guest: &environment.Resources.Memory},
+		Resources: forge.VirtualMachineResources(environment),
+		Devices: virtv1.Devices{
+			NetworkInterfaceMultiQueue: ptr.To(true),
+			Disks:                      []virtv1.Disk{forge.VolumeDiskTarget("containervolume")},
+		},
+	}
+}
