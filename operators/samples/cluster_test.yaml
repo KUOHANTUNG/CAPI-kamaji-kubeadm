@@ -58,20 +58,17 @@ spec:
     persistent: true
     resources:
         cpu: 2
-        memory: 2G
-        disk: 4G
-        reservedCPUPercentage: 25
+        memory: 4G
+        reservedCPUPercentage: 50
     mode: Standard
     mountMyDriveVolume: false
     cluster:
       name: testdemo
-      version: v1.32.1
+      version: v1.30.3
       serviceType: ClusterIP
       clusterNet:
-        pods:
-          cidrBlocks: ["10.244.0.0/16"]
-        services:
-          cidrBlocks: ["10.96.0.0/12"]
+        pods: "10.80.0.0/16"
+        services: "10.95.0.0/16"
         cni: calico
       controlPlane:
         provider: kubeadm

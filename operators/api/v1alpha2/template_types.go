@@ -163,8 +163,8 @@ type ClusterTemplate struct {
 
 // The ClusterNetwork defines corrlative network components
 type ClusterNetwork struct {
-	Pods     CIDR `json:"pods"`
-	Services CIDR `json:"services"`
+	Pods     string `json:"pods"`
+	Services string `json:"services"`
 	// deploy a CNI solution
 	Cni CniProvider `json:"cni"`
 }
@@ -177,11 +177,6 @@ const (
 	CniCilium  CniProvider = "cilium"
 	CniFlannel CniProvider = "Flannel"
 )
-
-// Classless Inter-Domain Routing
-type CIDR struct {
-	CIDRBlocks []string `json:"cidrBlocks,omitempty"`
-}
 
 // The ControlPlaneRef defines the characteristics of controlplane
 type ControlPlaneRef struct {

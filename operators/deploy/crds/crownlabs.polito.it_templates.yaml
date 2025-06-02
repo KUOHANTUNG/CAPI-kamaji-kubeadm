@@ -98,21 +98,9 @@ spec:
                               description: deploy a CNI solution
                               type: string
                             pods:
-                              description: Classless Inter-Domain Routing
-                              properties:
-                                cidrBlocks:
-                                  items:
-                                    type: string
-                                  type: array
-                              type: object
+                              type: string
                             services:
-                              description: Classless Inter-Domain Routing
-                              properties:
-                                cidrBlocks:
-                                  items:
-                                    type: string
-                                  type: array
-                              type: object
+                              type: string
                           required:
                           - cni
                           - pods
