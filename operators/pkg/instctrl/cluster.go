@@ -187,8 +187,6 @@ func (r *InstanceReconciler) enforceKubevirtMachine(ctx context.Context) error {
 			vmSpec := ClusterVMSpec(environment)
 			wmworker.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
 		}
-		// label
-		wmworker.Spec.Template.Spec.VirtualMachineTemplate.Spec.Running = ptr.To(instance.Spec.Running)
 		if wmworker.Labels == nil {
 			wmworker.Labels = map[string]string{}
 		}
