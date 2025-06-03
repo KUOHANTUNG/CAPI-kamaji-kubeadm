@@ -17,6 +17,10 @@ github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XL
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
+github.com/clastix/cluster-api-control-plane-provider-kamaji v0.15.2 h1:ximD8W44nAIzUBvcfUdinMHqE5XamjBKt5U3YQIN9O4=
+github.com/clastix/cluster-api-control-plane-provider-kamaji v0.15.2/go.mod h1:rkokkSmYctpzoX1OwJN8LBe3jRM127Cj9PPUJrPLOsI=
+github.com/clastix/kamaji v1.0.1-0.20250428170502-994ca7687d0f h1:ISUSwDJ98eX3b+dSFhsBbrTNZooHfwNtfdtxptlcius=
+github.com/clastix/kamaji v1.0.1-0.20250428170502-994ca7687d0f/go.mod h1:TnS/js8jOpl+7DuEJpJ0RMKHV3IvfDbPr0nf5qvT0wY=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -441,8 +445,8 @@ k8s.io/cluster-bootstrap v0.32.3/go.mod h1:CHbBwgOb6liDV6JFUTkx5t85T2xidy0sChBDo
 k8s.io/code-generator v0.23.3/go.mod h1:S0Q1JVA+kSzTI1oUvbKAxZY/DYbA/ZUb4Uknog12ETk=
 k8s.io/component-base v0.33.0 h1:Ot4PyJI+0JAD9covDhwLp9UNkUja209OzsJ4FzScBNk=
 k8s.io/component-base v0.33.0/go.mod h1:aXYZLbw3kihdkOPMDhWbjGCO6sg+luw554KP51t8qCU=
-k8s.io/cri-api v0.29.3 h1:ppKSui+hhTJW774Mou6x+/ealmzt2jmTM0vsEQVWrjI=
-k8s.io/cri-api v0.29.3/go.mod h1:3X7EnhsNaQnCweGhQCJwKNHlH7wHEYuKQ19bRvXMoJY=
+k8s.io/cri-api v0.33.0 h1:YyGNgWmuSREqFPlP3XCstlHLilYdW898KwtKoaTYwBs=
+k8s.io/cri-api v0.33.0/go.mod h1:OLQvT45OpIA+tv91ZrpuFIGY+Y2Ho23poS7n115Aocs=
 k8s.io/gengo v0.0.0-20210813121822-485abfe95c7c/go.mod h1:FiNAH4ZV3gBg2Kwh89tzAEV2be7d5xI0vBa/VySYy3E=
 k8s.io/gengo v0.0.0-20211129171323-c02415ce4185/go.mod h1:FiNAH4ZV3gBg2Kwh89tzAEV2be7d5xI0vBa/VySYy3E=
 k8s.io/klog/v2 v2.0.0/go.mod h1:PBfzABfn139FHAV07az/IF9Wp1bkk3vpT2XSJ76fSDE=

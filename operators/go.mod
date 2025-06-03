@@ -1,11 +1,12 @@
 module github.com/netgroup-polito/CrownLabs/operators
 
-go 1.24.0
+go 1.24.1
 
 toolchain go1.24.3
 
 require (
 	github.com/Nerzal/gocloak/v7 v7.11.0
+	github.com/clastix/cluster-api-control-plane-provider-kamaji v0.15.2
 	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1
 	github.com/dustinkirkland/golang-petname v0.0.0-20231002161417-6a283f1aaaf2
 	github.com/go-logr/logr v1.4.2
@@ -21,7 +22,7 @@ require (
 	k8s.io/api v0.33.0
 	k8s.io/apimachinery v0.33.0
 	k8s.io/client-go v0.33.0
-	k8s.io/cri-api v0.29.3
+	k8s.io/cri-api v0.33.0
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20250321185631-1f6e0b77f77e
 	kubevirt.io/api v1.5.0
@@ -31,6 +32,7 @@ require (
 
 require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/clastix/kamaji v1.0.1-0.20250428170502-994ca7687d0f // indirect
 	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/google/btree v1.1.3 // indirect

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	controlplanekamajiv1 "github.com/clastix/cluster-api-control-plane-provider-kamaji/api/v1alpha1"
+	"github.com/clastix/kamaji/api/v1alpha1"
 	"github.com/netgroup-polito/CrownLabs/operators/api/v1alpha2"
 	clv1alpha2 "github.com/netgroup-polito/CrownLabs/operators/api/v1alpha2"
 	clctx "github.com/netgroup-polito/CrownLabs/operators/pkg/context"
@@ -23,17 +25,18 @@ import (
 
 // InstanceReconciler enforces the Cluster API environment for a CrownLabs instance
 func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) error {
-	// log := ctrl.LoggerFrom(ctx)
-	// environment := clctx.EnvironmentFrom(ctx)
-	// if environment.Mode == clv1alpha2.ModeStandard {
-	// 	if err := r.EnforceCloudInitSecret(ctx); err != nil {
-	// 		log.Error(err, "failed to enforce the cloud-init secret existence")
-	// 		return err
-	// 	}
-	// }
+
+	environment := clctx.EnvironmentFrom(ctx)
+	Provider := environment.Cluster.ControlPlane.Provider
 	r.enforceCluster(ctx)
-	r.enforceInfra(ctx)
-	r.enforceControlPlane(ctx)
+	if Provider == clv1alpha2.ProviderKubeadm {
+		fmt.Println("321")
+		r.enforceKubeadmInfra(ctx)
+		r.enforceKubeadmControlPlane(ctx)
+	} else {
+		r.enforceKamajiInfra(ctx)
+		r.enforceKamajiControlPlane(ctx)
+	}
 	r.enforceMachineDeployment(ctx)
 	r.enforceKubevirtMachine(ctx)
 	r.enforceBootstrap(ctx)
@@ -53,13 +56,6 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 		},
 	}
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, cl, func() error {
-		// ensure refs exist
-		if cl.Spec.InfrastructureRef == nil {
-			cl.Spec.InfrastructureRef = &corev1.ObjectReference{}
-		}
-		if cl.Spec.ControlPlaneRef == nil {
-			cl.Spec.ControlPlaneRef = &corev1.ObjectReference{}
-		}
 		if cl.CreationTimestamp.IsZero() {
 			// align infrastructure and controlPlane refs
 			cl.Spec = ClusterSpec(instance, environment)
@@ -76,7 +72,7 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 }
 
 // enforceInfra creates or updates the KubevirtCluster resource and labels it for CAPI
-func (r *InstanceReconciler) enforceInfra(ctx context.Context) error {
+func (r *InstanceReconciler) enforceKubeadmInfra(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
 	instance := clctx.InstanceFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
@@ -95,6 +91,35 @@ func (r *InstanceReconciler) enforceInfra(ctx context.Context) error {
 			infra.Labels = map[string]string{}
 		}
 		infra.SetLabels(forge.InstanceObjectLabels(infra.GetLabels(), instance))
+
+		return nil
+	})
+	if err != nil {
+		log.Error(err, "failed to enforce infrastructure", "infra", klog.KObj(infra))
+		return err
+	}
+	log.V(utils.FromResult(res)).Info("Infrastructure enforced", "infra", klog.KObj(infra), "result", res)
+	return nil
+}
+
+// kamaji infra
+func (r *InstanceReconciler) enforceKamajiInfra(ctx context.Context) error {
+	log := ctrl.LoggerFrom(ctx)
+	instance := clctx.InstanceFrom(ctx)
+	environment := clctx.EnvironmentFrom(ctx)
+	cluster := environment.Cluster
+	infra := &infrav1.KubevirtCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        fmt.Sprintf("%s-infra", cluster.Name),
+			Namespace:   instance.Namespace,
+			Annotations: map[string]string{"cluster.x-k8s.io/managed-by": "kamaji"},
+		},
+	}
+	res, err := ctrl.CreateOrUpdate(ctx, r.Client, infra, func() error {
+		if infra.Labels == nil {
+			infra.Labels = map[string]string{}
+		}
+		infra.SetLabels(forge.InstanceObjectLabels(infra.GetLabels(), instance))
 		return nil
 	})
 	if err != nil {
@@ -106,7 +131,7 @@ func (r *InstanceReconciler) enforceInfra(ctx context.Context) error {
 }
 
 // enforceControlPlane creates or updates the KubeadmControlPlane resource and labels it
-func (r *InstanceReconciler) enforceControlPlane(ctx context.Context) error {
+func (r *InstanceReconciler) enforceKubeadmControlPlane(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
 	instance := clctx.InstanceFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
@@ -138,6 +163,69 @@ func (r *InstanceReconciler) enforceControlPlane(ctx context.Context) error {
 	}
 	log.V(utils.FromResult(res)).Info("ControlPlane enforced", "cp", klog.KObj(cp), "result", res)
 	return nil
+}
+
+// kamaji controlplane
+func (r *InstanceReconciler) enforceKamajiControlPlane(ctx context.Context) error {
+	log := ctrl.LoggerFrom(ctx)
+	instance := clctx.InstanceFrom(ctx)
+	environment := clctx.EnvironmentFrom(ctx)
+	cluster := environment.Cluster
+	controlplane := cluster.ControlPlane
+	cp := &controlplanekamajiv1.KamajiControlPlane{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-control-plane", cluster.Name),
+			Namespace: instance.Namespace,
+		},
+	}
+	res, err := ctrl.CreateOrUpdate(ctx, r.Client, cp, func() error {
+		if cp.CreationTimestamp.IsZero() {
+
+			cp.Spec = KamajiControlPlaneSpec(environment)
+		}
+		cp.Spec.Replicas = ptr.To(int32(controlplane.Replicas))
+		if cp.Labels == nil {
+			cp.Labels = map[string]string{}
+		}
+		cp.SetLabels(forge.InstanceObjectLabels(cp.GetLabels(), instance))
+		return nil
+	})
+	if err != nil {
+		log.Error(err, "failed to enforce controlplane", "cp", klog.KObj(cp))
+		return err
+	}
+	log.V(utils.FromResult(res)).Info("ControlPlane enforced", "cp", klog.KObj(cp), "result", res)
+	return nil
+}
+func KamajiControlPlaneSpec(environment *clv1alpha2.Environment) controlplanekamajiv1.KamajiControlPlaneSpec {
+	return controlplanekamajiv1.KamajiControlPlaneSpec{
+		KamajiControlPlaneFields: KamajiControlPlaneFields(environment),
+		Replicas:                 ptr.To(int32(environment.Cluster.ControlPlane.Replicas)),
+		Version:                  environment.Cluster.Version,
+	}
+}
+
+func KamajiControlPlaneFields(environment *clv1alpha2.Environment) controlplanekamajiv1.KamajiControlPlaneFields {
+	return controlplanekamajiv1.KamajiControlPlaneFields{
+		DataStoreName: "default",
+		Addons: controlplanekamajiv1.AddonsSpec{
+			AddonsSpec: v1alpha1.AddonsSpec{
+				CoreDNS:   ptr.To(v1alpha1.AddonSpec{}),
+				KubeProxy: ptr.To(v1alpha1.AddonSpec{}),
+			},
+		},
+		Kubelet: v1alpha1.KubeletSpec{
+			CGroupFS: v1alpha1.CGroupDriver("systemd"),
+			PreferredAddressTypes: []v1alpha1.KubeletPreferredAddressType{
+				"InternalIP",
+				"ExternalIP",
+			},
+		},
+		Network: controlplanekamajiv1.NetworkComponent{
+			ServiceType: v1alpha1.ServiceType(environment.Cluster.ServiceType),
+		},
+		Deployment: controlplanekamajiv1.DeploymentComponent{},
+	}
 }
 
 // enforceMachineDeployment creates or updates the MachineDeployment and labels it
@@ -361,21 +449,41 @@ func ControlPlaneNetworking(instance *clv1alpha2.Instance, environment *clv1alph
 }
 
 func ClusterSpec(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) capiv1.ClusterSpec {
-	return capiv1.ClusterSpec{
-		ClusterNetwork: ptr.To(ClusterNetworking(environment)),
-		InfrastructureRef: ptr.To(corev1.ObjectReference{
-			APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha1",
-			Kind:       "KubevirtCluster",
-			Name:       fmt.Sprintf("%s-infra", environment.Cluster.Name),
-			Namespace:  instance.Namespace,
-		}),
-		ControlPlaneRef: ptr.To(corev1.ObjectReference{
-			APIVersion: "controlplane.cluster.x-k8s.io/v1beta1",
-			Kind:       "KubeadmControlPlane",
-			Name:       fmt.Sprintf("%s-control-plane", environment.Cluster.Name),
-			Namespace:  instance.Namespace,
-		}),
+	Provider := environment.Cluster.ControlPlane.Provider
+	if Provider == clv1alpha2.ProviderKubeadm {
+		return capiv1.ClusterSpec{
+			ClusterNetwork: ptr.To(ClusterNetworking(environment)),
+			InfrastructureRef: ptr.To(corev1.ObjectReference{
+				APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha1",
+				Kind:       "KubevirtCluster",
+				Name:       fmt.Sprintf("%s-infra", environment.Cluster.Name),
+				Namespace:  instance.Namespace,
+			}),
+			ControlPlaneRef: ptr.To(corev1.ObjectReference{
+				APIVersion: "controlplane.cluster.x-k8s.io/v1beta1",
+				Kind:       "KubeadmControlPlane",
+				Name:       fmt.Sprintf("%s-control-plane", environment.Cluster.Name),
+				Namespace:  instance.Namespace,
+			}),
+		}
+	} else {
+		return capiv1.ClusterSpec{
+			ClusterNetwork: ptr.To(ClusterNetworking(environment)),
+			InfrastructureRef: ptr.To(corev1.ObjectReference{
+				APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha1",
+				Kind:       "KubevirtCluster",
+				Name:       fmt.Sprintf("%s-infra", environment.Cluster.Name),
+				Namespace:  instance.Namespace,
+			}),
+			ControlPlaneRef: ptr.To(corev1.ObjectReference{
+				APIVersion: "controlplane.cluster.x-k8s.io/v1alpha1",
+				Kind:       "KamajiControlPlane",
+				Name:       fmt.Sprintf("%s-control-plane", environment.Cluster.Name),
+				Namespace:  instance.Namespace,
+			}),
+		}
 	}
+
 }
 
 func ClusterNetworking(environment *clv1alpha2.Environment) capiv1.ClusterNetwork {

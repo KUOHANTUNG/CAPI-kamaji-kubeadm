@@ -197,7 +197,6 @@ func (r *InstanceReconciler) enforceEnvironments(ctx context.Context) error {
 			log.Error(err, "failed to process environment")
 			return nil
 		}
-		fmt.Println("321")
 		switch template.Spec.EnvironmentList[i].EnvironmentType {
 		case clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM:
 			if err := r.EnforceVMEnvironment(ctx); err != nil {

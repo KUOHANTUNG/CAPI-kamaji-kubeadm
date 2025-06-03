@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: tenant
+  name: tenant-test
   labels:
     crownlabs.polito.it/operator-selector: local
 ---
@@ -15,7 +15,7 @@ apiVersion: crownlabs.polito.it/v1alpha2
 kind: Instance
 metadata:
   name: green-tea-6831
-  namespace: tenant
+  namespace: tenant-test
 spec:
   template.crownlabs.polito.it/TemplateRef:
     name: green-tea
@@ -64,14 +64,14 @@ spec:
     mountMyDriveVolume: false
     cluster:
       name: testdemo
-      version: v1.30.3
+      version: v1.30.2
       serviceType: ClusterIP
       clusterNet:
         pods: "10.80.0.0/16"
         services: "10.95.0.0/16"
         cni: calico
       controlPlane:
-        provider: kubeadm
+        provider: kamaji
         certSANs: ["controlplane.com"]
         replicas: 1
       machineDeployment:
