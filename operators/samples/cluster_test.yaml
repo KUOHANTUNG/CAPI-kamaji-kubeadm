@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: tenant-test
+  name: tenant-test123
   labels:
     crownlabs.polito.it/operator-selector: local
 ---
@@ -15,7 +15,7 @@ apiVersion: crownlabs.polito.it/v1alpha2
 kind: Instance
 metadata:
   name: green-tea-6831
-  namespace: tenant-test
+  namespace: tenant-test123
 spec:
   template.crownlabs.polito.it/TemplateRef:
     name: green-tea

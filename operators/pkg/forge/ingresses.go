@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	netv1 "k8s.io/api/networking/v1"
+	"k8s.io/utils/ptr"
 
 	clv1alpha2 "github.com/netgroup-polito/CrownLabs/operators/api/v1alpha2"
 )
@@ -66,6 +67,32 @@ func IngressSpec(host, path, certificateName, serviceName, servicePort string) n
 				},
 			},
 		}},
+	}
+}
+
+// IngressSpec forges the specification of a Kubernetes Ingress resource only for cluster
+func IngressClusterSpec(host, path, certificateName, serviceName, servicePort string) netv1.IngressSpec {
+	pathTypePrefix := netv1.PathTypePrefix
+	return netv1.IngressSpec{
+		TLS: []netv1.IngressTLS{{Hosts: []string{host}, SecretName: certificateName}},
+		Rules: []netv1.IngressRule{{
+			Host: host,
+			IngressRuleValue: netv1.IngressRuleValue{
+				HTTP: &netv1.HTTPIngressRuleValue{
+					Paths: []netv1.HTTPIngressPath{{
+						Path:     path,
+						PathType: &pathTypePrefix,
+						Backend: netv1.IngressBackend{
+							Service: &netv1.IngressServiceBackend{
+								Name: serviceName,
+								Port: netv1.ServiceBackendPort{Name: servicePort},
+							},
+						},
+					}},
+				},
+			},
+		}},
+		IngressClassName: ptr.To("nginx-ssl"),
 	}
 }
 
@@ -136,7 +163,7 @@ func IngressGUIPath(instance *clv1alpha2.Instance, environment *clv1alpha2.Envir
 		return strings.TrimRight(fmt.Sprintf("%v/%v/%v", IngressInstancePrefix, instance.UID, IngressAppSuffix), "/")
 	case clv1alpha2.ClassContainer:
 		return strings.TrimRight(fmt.Sprintf("%v/%v/%v", IngressInstancePrefix, instance.UID, IngressAppSuffix), "/")
-	case clv1alpha2.ClassCloudVM, clv1alpha2.ClassVM:
+	case clv1alpha2.ClassCloudVM, clv1alpha2.ClassVM, clv1alpha2.ClassCluster:
 		return strings.TrimRight(fmt.Sprintf("%v/%v/%v", IngressInstancePrefix, instance.UID, IngressVNCGUIPathSuffix), "/")
 	}
 	return ""
@@ -152,7 +179,7 @@ func IngressGuiStatusURL(host string, environment *clv1alpha2.Environment, insta
 	switch environment.EnvironmentType {
 	case clv1alpha2.ClassStandalone, clv1alpha2.ClassContainer:
 		return fmt.Sprintf("https://%v%v/%v/%v/", host, IngressInstancePrefix, instance.UID, IngressAppSuffix)
-	case clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM:
+	case clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM, clv1alpha2.ClassCluster:
 		return fmt.Sprintf("https://%v%v/%v/", host, IngressInstancePrefix, instance.UID)
 	}
 	return ""
@@ -163,7 +190,7 @@ func IngressGUIName(environment *clv1alpha2.Environment) string {
 	switch environment.EnvironmentType {
 	case clv1alpha2.ClassStandalone:
 		return IngressAppSuffix
-	case clv1alpha2.ClassContainer, clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM:
+	case clv1alpha2.ClassContainer, clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM, clv1alpha2.ClassCluster:
 		return IngressGUINameSuffix
 	}
 	return ""

@@ -16,9 +16,11 @@ package instctrl
 
 import (
 	"context"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -45,9 +47,15 @@ func (r *InstanceReconciler) enforceInstanceExpositionPresence(ctx context.Conte
 	log := ctrl.LoggerFrom(ctx)
 	instance := clctx.InstanceFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
-
+	cluster := environment.Cluster
 	// Enforce the service presence
 	service := v1.Service{ObjectMeta: forge.ObjectMeta(instance)}
+	if environment.EnvironmentType == clv1alpha2.ClassCluster {
+		service = v1.Service{ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-control-plane", cluster.Name),
+			Namespace: instance.Namespace,
+		}}
+	}
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, &service, func() error {
 		// Service specifications are forged only at creation time, to prevent issues in case of updates.
 		// Indeed, enforcing the specs may cause service disruption if they diverge from the backend
@@ -61,8 +69,11 @@ func (r *InstanceReconciler) enforceInstanceExpositionPresence(ctx context.Conte
 			labels = forge.MonitorableServiceLabels(labels)
 		}
 		service.SetLabels(labels)
-
-		return ctrl.SetControllerReference(instance, &service, r.Scheme)
+		if environment.EnvironmentType == clv1alpha2.ClassCluster {
+			return nil
+		} else {
+			return ctrl.SetControllerReference(instance, &service, r.Scheme)
+		}
 	})
 
 	if err != nil {
@@ -80,15 +91,22 @@ func (r *InstanceReconciler) enforceInstanceExpositionPresence(ctx context.Conte
 	// Enforce the ingress to access the environment GUI
 
 	host := forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode)
-
+	fmt.Println("host:", host)
+	fmt.Println("service.GetName:", service.GetName())
+	fmt.Println("forge.IngressGUIPath:", forge.IngressGUIPath(instance, environment))
 	ingressGUI := netv1.Ingress{ObjectMeta: forge.ObjectMetaWithSuffix(instance, forge.IngressGUIName(environment))}
 
 	res, err = ctrl.CreateOrUpdate(ctx, r.Client, &ingressGUI, func() error {
 		// Ingress specifications are forged only at creation time, to prevent issues in case of updates.
 		// Indeed, enforcing the specs may cause service disruption if they diverge from the service configuration.
 		if ingressGUI.CreationTimestamp.IsZero() {
-			ingressGUI.Spec = forge.IngressSpec(host, forge.IngressGUIPath(instance, environment),
-				forge.IngressDefaultCertificateName, service.GetName(), forge.GUIPortName)
+			if environment.EnvironmentType == clv1alpha2.ClassCluster {
+				ingressGUI.Spec = forge.IngressClusterSpec(host, forge.IngressGUIPath(instance, environment),
+					forge.IngressDefaultCertificateName, service.GetName(), "kube-apiserver")
+			} else {
+				ingressGUI.Spec = forge.IngressSpec(host, forge.IngressGUIPath(instance, environment),
+					forge.IngressDefaultCertificateName, service.GetName(), forge.GUIPortName)
+			}
 		}
 		ingressGUI.SetLabels(forge.InstanceObjectLabels(ingressGUI.GetLabels(), instance))
 

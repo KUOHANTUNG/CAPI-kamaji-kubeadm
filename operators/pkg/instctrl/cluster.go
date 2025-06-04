@@ -25,9 +25,10 @@ import (
 
 // InstanceReconciler enforces the Cluster API environment for a CrownLabs instance
 func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) error {
-
+	log := ctrl.LoggerFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
 	Provider := environment.Cluster.ControlPlane.Provider
+
 	r.enforceCluster(ctx)
 	if Provider == clv1alpha2.ProviderKubeadm {
 		fmt.Println("321")
@@ -40,6 +41,12 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 	r.enforceMachineDeployment(ctx)
 	r.enforceKubevirtMachine(ctx)
 	r.enforceBootstrap(ctx)
+	// Enforce the service and the ingress to expose the environment.
+	err := r.EnforceInstanceExposition(ctx)
+	if err != nil {
+		log.Error(err, "failed to enforce the instance exposition objects")
+		return err
+	}
 	return nil
 }
 
@@ -147,8 +154,8 @@ func (r *InstanceReconciler) enforceKubeadmControlPlane(ctx context.Context) err
 
 		if cp.CreationTimestamp.IsZero() {
 			cp.Spec.Version = cluster.Version
-
-			cp.Spec = ClusterControlPlaneSepc(instance, environment)
+			host := forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode)
+			cp.Spec = ClusterControlPlaneSepc(instance, environment, host)
 		}
 		cp.Spec.Replicas = ptr.To(int32(controlplane.Replicas))
 		if cp.Labels == nil {
@@ -180,8 +187,8 @@ func (r *InstanceReconciler) enforceKamajiControlPlane(ctx context.Context) erro
 	}
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, cp, func() error {
 		if cp.CreationTimestamp.IsZero() {
-
-			cp.Spec = KamajiControlPlaneSpec(environment)
+			host := forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode)
+			cp.Spec = KamajiControlPlaneSpec(environment, host)
 		}
 		cp.Spec.Replicas = ptr.To(int32(controlplane.Replicas))
 		if cp.Labels == nil {
@@ -197,15 +204,15 @@ func (r *InstanceReconciler) enforceKamajiControlPlane(ctx context.Context) erro
 	log.V(utils.FromResult(res)).Info("ControlPlane enforced", "cp", klog.KObj(cp), "result", res)
 	return nil
 }
-func KamajiControlPlaneSpec(environment *clv1alpha2.Environment) controlplanekamajiv1.KamajiControlPlaneSpec {
+func KamajiControlPlaneSpec(environment *clv1alpha2.Environment, host string) controlplanekamajiv1.KamajiControlPlaneSpec {
 	return controlplanekamajiv1.KamajiControlPlaneSpec{
-		KamajiControlPlaneFields: KamajiControlPlaneFields(environment),
+		KamajiControlPlaneFields: KamajiControlPlaneFields(environment, host),
 		Replicas:                 ptr.To(int32(environment.Cluster.ControlPlane.Replicas)),
 		Version:                  environment.Cluster.Version,
 	}
 }
 
-func KamajiControlPlaneFields(environment *clv1alpha2.Environment) controlplanekamajiv1.KamajiControlPlaneFields {
+func KamajiControlPlaneFields(environment *clv1alpha2.Environment, host string) controlplanekamajiv1.KamajiControlPlaneFields {
 	return controlplanekamajiv1.KamajiControlPlaneFields{
 		DataStoreName: "default",
 		Addons: controlplanekamajiv1.AddonsSpec{
@@ -223,6 +230,9 @@ func KamajiControlPlaneFields(environment *clv1alpha2.Environment) controlplanek
 		},
 		Network: controlplanekamajiv1.NetworkComponent{
 			ServiceType: v1alpha1.ServiceType(environment.Cluster.ServiceType),
+			CertSANs: []string{
+				host,
+			},
 		},
 		Deployment: controlplanekamajiv1.DeploymentComponent{},
 	}
@@ -410,18 +420,18 @@ func MachineInfrastructureRef(instance *clv1alpha2.Instance, environment *clv1al
 	}
 }
 
-func ClusterControlPlaneSepc(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) controlplanev1.KubeadmControlPlaneSpec {
+func ClusterControlPlaneSepc(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment, host string) controlplanev1.KubeadmControlPlaneSpec {
 	return controlplanev1.KubeadmControlPlaneSpec{
 		MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
 			InfrastructureRef: MachineInfrastructureRef(instance, environment, fmt.Sprintf("%s-control-plane-machine", environment.Cluster.Name)),
 		},
-		KubeadmConfigSpec: ControlPlaneKubeadmConfigSpec(instance, environment),
+		KubeadmConfigSpec: ControlPlaneKubeadmConfigSpec(instance, environment, host),
 		Version:           environment.Cluster.Version,
 	}
 }
-func ControlPlaneKubeadmConfigSpec(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) bootstrapv1.KubeadmConfigSpec {
+func ControlPlaneKubeadmConfigSpec(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment, host string) bootstrapv1.KubeadmConfigSpec {
 	return bootstrapv1.KubeadmConfigSpec{
-		ClusterConfiguration: ptr.To(ControlPlaneClusterConfiguration(instance, environment)),
+		ClusterConfiguration: ptr.To(ControlPlaneClusterConfiguration(instance, environment, host)),
 		InitConfiguration: ptr.To(bootstrapv1.InitConfiguration{
 			NodeRegistration: bootstrapv1.NodeRegistrationOptions{CRISocket: "/var/run/containerd/containerd.sock"},
 		}),
@@ -431,11 +441,13 @@ func ControlPlaneKubeadmConfigSpec(instance *clv1alpha2.Instance, environment *c
 	}
 }
 
-func ControlPlaneClusterConfiguration(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) bootstrapv1.ClusterConfiguration {
+func ControlPlaneClusterConfiguration(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment, host string) bootstrapv1.ClusterConfiguration {
 	return bootstrapv1.ClusterConfiguration{
 		Networking: ControlPlaneNetworking(instance, environment),
 		APIServer: bootstrapv1.APIServer{
-			CertSANs: environment.Cluster.ControlPlane.CertSANs,
+			CertSANs: []string{
+				host,
+			},
 		},
 	}
 }
