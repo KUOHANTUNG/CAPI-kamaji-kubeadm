@@ -30,6 +30,9 @@ const (
 
 	// IngressGUINameSuffix -> the suffix added to the name of the ingress targeting the environment GUI.
 	IngressGUINameSuffix = "gui"
+
+	IngressDashboardSuffix = "dashboard"
+
 	// IngressAppSuffix -> the suffix added to the path of the ingress targeting standalone and container environments.
 	IngressAppSuffix = "app"
 
@@ -38,6 +41,9 @@ const (
 
 	// IngressVNCGUIPathSuffix -> the suffix appended to the path of the ingress targeting the environment GUI websocketed vnc endpoint.
 	IngressVNCGUIPathSuffix = "vnc"
+
+	// IngressdashboardPathSuffix -> the suffix appended to the path of the ingress targeting the environment dashboard endpoint.
+	IngressdashboardPathSuffix = "dashboard"
 
 	// WebsockifyRewriteEndpoint -> endpoint of the websocketed vnc server.
 	WebsockifyRewriteEndpoint = "/websockify"
@@ -163,8 +169,10 @@ func IngressGUIPath(instance *clv1alpha2.Instance, environment *clv1alpha2.Envir
 		return strings.TrimRight(fmt.Sprintf("%v/%v/%v", IngressInstancePrefix, instance.UID, IngressAppSuffix), "/")
 	case clv1alpha2.ClassContainer:
 		return strings.TrimRight(fmt.Sprintf("%v/%v/%v", IngressInstancePrefix, instance.UID, IngressAppSuffix), "/")
-	case clv1alpha2.ClassCloudVM, clv1alpha2.ClassVM, clv1alpha2.ClassCluster:
+	case clv1alpha2.ClassCloudVM, clv1alpha2.ClassVM:
 		return strings.TrimRight(fmt.Sprintf("%v/%v/%v", IngressInstancePrefix, instance.UID, IngressVNCGUIPathSuffix), "/")
+	case clv1alpha2.ClassCluster:
+		return strings.TrimRight(fmt.Sprintf("%v/%v/%v", IngressInstancePrefix, instance.UID, IngressdashboardPathSuffix), "/")
 	}
 	return ""
 }
@@ -190,8 +198,10 @@ func IngressGUIName(environment *clv1alpha2.Environment) string {
 	switch environment.EnvironmentType {
 	case clv1alpha2.ClassStandalone:
 		return IngressAppSuffix
-	case clv1alpha2.ClassContainer, clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM, clv1alpha2.ClassCluster:
+	case clv1alpha2.ClassContainer, clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM:
 		return IngressGUINameSuffix
+	case clv1alpha2.ClassCluster:
+		return IngressDashboardSuffix
 	}
 	return ""
 }

@@ -183,9 +183,6 @@ type ControlPlaneRef struct {
 	// The controlplane provider
 	Provider ControlPlaneProvider `json:"provider"`
 
-	// The Certificate Subject Alternative Names used to access the controlplane
-	CertSANs []string `json:"certSANs,omitempty"`
-
 	// +kubebuilder:validation:Minimum:=1
 	// +kubebuilder:validation:Maximum:=100
 	// The number of controlplane

@@ -109,12 +109,6 @@ spec:
                         controlPlane:
                           description: The controlplane is used to control the cluster
                           properties:
-                            certSANs:
-                              description: The Certificate Subject Alternative Names
-                                used to access the controlplane
-                              items:
-                                type: string
-                              type: array
                             provider:
                               description: The controlplane provider
                               type: string

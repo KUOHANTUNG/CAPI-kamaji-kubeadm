@@ -33,6 +33,8 @@ const (
 	// MetricsPortNumber -> the port in the container in which the metrics server is accessible.
 	MetricsPortNumber = 9090
 
+	//ClusterPortName -> the name of the port cluster service is exposed to.
+	ClusterPortName = "kube-apiserver"
 	// SSHPortName -> the name of the port the SSH daemon is exposed to.
 	SSHPortName = "ssh"
 	// GUIPortName -> the name of the port the NoVNC service is exposed to.
