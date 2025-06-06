@@ -3,6 +3,8 @@ package instctrl
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 
 	controlplanekamajiv1 "github.com/clastix/cluster-api-control-plane-provider-kamaji/api/v1alpha1"
 	"github.com/clastix/kamaji/api/v1alpha1"
@@ -28,10 +30,9 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 	log := ctrl.LoggerFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
 	Provider := environment.Cluster.ControlPlane.Provider
-
+	instance := clctx.InstanceFrom(ctx)
 	r.enforceCluster(ctx)
 	if Provider == clv1alpha2.ProviderKubeadm {
-		fmt.Println("321")
 		r.enforceKubeadmInfra(ctx)
 		r.enforceKubeadmControlPlane(ctx)
 	} else {
@@ -47,6 +48,7 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 		log.Error(err, "failed to enforce the instance exposition objects")
 		return err
 	}
+	insertKubeConfig(instance, environment)
 	return nil
 }
 
@@ -56,6 +58,7 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 	instance := clctx.InstanceFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
 	cluster := environment.Cluster
+	// var template clv1alpha2.Template
 	cl := &capiv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-cluster", cluster.Name),
@@ -67,6 +70,16 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 			// align infrastructure and controlPlane refs
 			cl.Spec = ClusterSpec(instance, environment)
 		}
+		// template.Status.KubeConfigs = []clv1alpha2.KubeconfigTemplate{
+		// 	{
+		// 		Name:        fmt.Sprintf("%s-cluster", cluster.Name),
+		// 		FileAddress: fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name),
+		// 	},
+		// }
+		// if err := r.Status().Update(ctx, &template); err != nil {
+		// 	log.Error(err, "failed to update status", "cluster", klog.KObj(cl))
+		// 	return err
+		// }
 		cl.SetLabels(forge.InstanceObjectLabels(cl.GetLabels(), instance))
 		return ctrl.SetControllerReference(instance, cl, r.Scheme)
 	})
@@ -507,4 +520,19 @@ func ClusterNetworking(environment *clv1alpha2.Environment) capiv1.ClusterNetwor
 			CIDRBlocks: []string{environment.Cluster.ClusterNet.Services},
 		}),
 	}
+}
+
+func insertKubeConfig(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) error {
+	fmt.Println("321")
+	cluster := environment.Cluster
+	cmd := exec.Command(
+		"clusterctl", "get", "kubeconfig", fmt.Sprintf("%s-cluster", cluster.Name),
+		"--namespace", instance.Namespace,
+	)
+	outFile := fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name)
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("clusterctl failed: %w", err)
+	}
+	return os.WriteFile(outFile, out, 0o600)
 }

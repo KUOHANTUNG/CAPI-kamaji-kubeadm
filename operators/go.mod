@@ -7,6 +7,7 @@ toolchain go1.24.3
 require (
 	github.com/Nerzal/gocloak/v7 v7.11.0
 	github.com/clastix/cluster-api-control-plane-provider-kamaji v0.15.2
+	github.com/clastix/kamaji v1.0.1-0.20250428170502-994ca7687d0f
 	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1
 	github.com/dustinkirkland/golang-petname v0.0.0-20231002161417-6a283f1aaaf2
 	github.com/go-logr/logr v1.4.2
@@ -32,7 +33,6 @@ require (
 
 require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/clastix/kamaji v1.0.1-0.20250428170502-994ca7687d0f // indirect
 	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
@@ -87,7 +87,7 @@ require (
 	k8s.io/component-base v0.33.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4 // indirect
-	sigs.k8s.io/cluster-api v1.10.2
+	sigs.k8s.io/cluster-api v1.10.1
 	sigs.k8s.io/cluster-api-provider-kubevirt v0.1.10
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
