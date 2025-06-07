@@ -111,6 +111,11 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 
+	// Install Cilium
+	if err := instctrl.InstallCiliumIfAbsent(); err != nil {
+		klog.Errorf("Cilium installation failed: %v", err)
+	}
+
 	ctrl.SetLogger(textlogger.NewLogger(textlogger.NewConfig()))
 
 	log := ctrl.Log.WithName("setup")
