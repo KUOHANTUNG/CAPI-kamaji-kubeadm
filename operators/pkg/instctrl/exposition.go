@@ -113,39 +113,60 @@ func (r *InstanceReconciler) enforceInstanceExpositionPresence(ctx context.Conte
 	fmt.Println("host:", host)
 	fmt.Println("service.GetName:", service.GetName())
 	fmt.Println("forge.IngressGUIPath:", forge.IngressGUIPath(instance, environment))
-	ingressGUI := netv1.Ingress{ObjectMeta: forge.ObjectMetaWithSuffix(instance, forge.IngressGUIName(environment))}
-
-	res, err := ctrl.CreateOrUpdate(ctx, r.Client, &ingressGUI, func() error {
-		// Ingress specifications are forged only at creation time, to prevent issues in case of updates.
-		// Indeed, enforcing the specs may cause service disruption if they diverge from the service configuration.
-		if ingressGUI.CreationTimestamp.IsZero() {
-			if environment.EnvironmentType == clv1alpha2.ClassCluster {
-				ingressGUI.Spec = forge.IngressClusterSpec(host, forge.IngressGUIPath(instance, environment),
-					forge.IngressDefaultCertificateName, service.GetName(), forge.ClusterPortName)
-			} else {
+	// cluster uses passthrough mode not ingress which will terminate in inress side.
+	if environment.EnvironmentType == clv1alpha2.ClassCluster {
+		configMap := v1.ConfigMap{ObjectMeta: forge.ObjectMetaWithSuffix(instance, forge.IngressGUIName(environment))}
+		res, err := ctrl.CreateOrUpdate(ctx, r.Client, &configMap, func() error {
+			if configMap.CreationTimestamp.IsZero() {
+				var serviceName string
+				if cluster.ControlPlane.Provider == clv1alpha2.ProviderKamaji {
+					serviceName = fmt.Sprintf("%s-control-plane", cluster.Name)
+				} else {
+					serviceName = fmt.Sprintf("%s-cluster-lb", cluster.Name)
+				}
+				configMap.Data = forge.ConfigMapData(instance, serviceName)
+			}
+			configMap.SetLabels(forge.InstanceObjectLabels(configMap.GetLabels(), instance))
+			configMap.SetAnnotations(forge.IngressGUIAnnotations(environment, configMap.GetAnnotations()))
+			if environment.Mode == clv1alpha2.ModeStandard {
+				configMap.SetAnnotations(forge.IngressAuthenticationAnnotations(configMap.GetAnnotations(), r.ServiceUrls.InstancesAuthURL))
+			}
+			return ctrl.SetControllerReference(instance, &configMap, r.Scheme)
+		})
+		if err != nil {
+			log.Error(err, "failed to create object", "configmap", klog.KObj(&configMap))
+			return err
+		}
+		log.V(utils.FromResult(res)).Info("object enforced", "configmap", klog.KObj(&configMap), "result", res)
+	} else {
+		ingressGUI := netv1.Ingress{ObjectMeta: forge.ObjectMetaWithSuffix(instance, forge.IngressGUIName(environment))}
+		res, err := ctrl.CreateOrUpdate(ctx, r.Client, &ingressGUI, func() error {
+			// Ingress specifications are forged only at creation time, to prevent issues in case of updates.
+			// Indeed, enforcing the specs may cause service disruption if they diverge from the service configuration.
+			if ingressGUI.CreationTimestamp.IsZero() {
 				ingressGUI.Spec = forge.IngressSpec(host, forge.IngressGUIPath(instance, environment),
 					forge.IngressDefaultCertificateName, service.GetName(), forge.GUIPortName)
+
 			}
+			ingressGUI.SetLabels(forge.InstanceObjectLabels(ingressGUI.GetLabels(), instance))
+
+			ingressGUI.SetAnnotations(forge.IngressGUIAnnotations(environment, ingressGUI.GetAnnotations()))
+
+			if environment.Mode == clv1alpha2.ModeStandard {
+				ingressGUI.SetAnnotations(forge.IngressAuthenticationAnnotations(ingressGUI.GetAnnotations(), r.ServiceUrls.InstancesAuthURL))
+			}
+
+			return ctrl.SetControllerReference(instance, &ingressGUI, r.Scheme)
+		})
+
+		if err != nil {
+			log.Error(err, "failed to create object", "ingress", klog.KObj(&ingressGUI))
+			return err
 		}
-		ingressGUI.SetLabels(forge.InstanceObjectLabels(ingressGUI.GetLabels(), instance))
 
-		ingressGUI.SetAnnotations(forge.IngressGUIAnnotations(environment, ingressGUI.GetAnnotations()))
-
-		if environment.Mode == clv1alpha2.ModeStandard {
-			ingressGUI.SetAnnotations(forge.IngressAuthenticationAnnotations(ingressGUI.GetAnnotations(), r.ServiceUrls.InstancesAuthURL))
-		}
-
-		return ctrl.SetControllerReference(instance, &ingressGUI, r.Scheme)
-	})
-
-	if err != nil {
-		log.Error(err, "failed to create object", "ingress", klog.KObj(&ingressGUI))
-		return err
+		log.V(utils.FromResult(res)).Info("object enforced", "ingress", klog.KObj(&ingressGUI), "result", res)
 	}
-
-	log.V(utils.FromResult(res)).Info("object enforced", "ingress", klog.KObj(&ingressGUI), "result", res)
 	instance.Status.URL = forge.IngressGuiStatusURL(host, environment, instance)
-
 	return nil
 }
 

@@ -187,8 +187,10 @@ func IngressGuiStatusURL(host string, environment *clv1alpha2.Environment, insta
 	switch environment.EnvironmentType {
 	case clv1alpha2.ClassStandalone, clv1alpha2.ClassContainer:
 		return fmt.Sprintf("https://%v%v/%v/%v/", host, IngressInstancePrefix, instance.UID, IngressAppSuffix)
-	case clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM, clv1alpha2.ClassCluster:
+	case clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM:
 		return fmt.Sprintf("https://%v%v/%v/", host, IngressInstancePrefix, instance.UID)
+	case clv1alpha2.ClassCluster:
+		return fmt.Sprintf("https://%v%v/%v/%v/", host, IngressInstancePrefix, instance.UID, IngressDashboardSuffix)
 	}
 	return ""
 }

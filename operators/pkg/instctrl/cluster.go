@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	controlplanekamajiv1 "github.com/clastix/cluster-api-control-plane-provider-kamaji/api/v1alpha1"
 	"github.com/clastix/kamaji/api/v1alpha1"
@@ -15,6 +16,7 @@ import (
 	"github.com/netgroup-polito/CrownLabs/operators/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	virtv1 "kubevirt.io/api/core/v1"
@@ -23,6 +25,12 @@ import (
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	// nginxprot -> the nodeport that nginx listening
+	nginxport = "30443"
 )
 
 // InstanceReconciler enforces the Cluster API environment for a CrownLabs instance
@@ -30,7 +38,6 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 	log := ctrl.LoggerFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
 	Provider := environment.Cluster.ControlPlane.Provider
-	instance := clctx.InstanceFrom(ctx)
 	r.enforceCluster(ctx)
 	if Provider == clv1alpha2.ProviderKubeadm {
 		r.enforceKubeadmInfra(ctx)
@@ -48,7 +55,9 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 		log.Error(err, "failed to enforce the instance exposition objects")
 		return err
 	}
-	insertKubeConfig(instance, environment)
+	time.Sleep(5 * time.Second)
+	r.insertKubeConfig(ctx)
+	r.updatetemplatestatus(ctx)
 	return nil
 }
 
@@ -58,7 +67,6 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 	instance := clctx.InstanceFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
 	cluster := environment.Cluster
-	// var template clv1alpha2.Template
 	cl := &capiv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-cluster", cluster.Name),
@@ -70,16 +78,6 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 			// align infrastructure and controlPlane refs
 			cl.Spec = ClusterSpec(instance, environment)
 		}
-		// template.Status.KubeConfigs = []clv1alpha2.KubeconfigTemplate{
-		// 	{
-		// 		Name:        fmt.Sprintf("%s-cluster", cluster.Name),
-		// 		FileAddress: fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name),
-		// 	},
-		// }
-		// if err := r.Status().Update(ctx, &template); err != nil {
-		// 	log.Error(err, "failed to update status", "cluster", klog.KObj(cl))
-		// 	return err
-		// }
 		cl.SetLabels(forge.InstanceObjectLabels(cl.GetLabels(), instance))
 		return ctrl.SetControllerReference(instance, cl, r.Scheme)
 	})
@@ -522,17 +520,67 @@ func ClusterNetworking(environment *clv1alpha2.Environment) capiv1.ClusterNetwor
 	}
 }
 
-func insertKubeConfig(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) error {
-	fmt.Println("321")
+func (r *InstanceReconciler) insertKubeConfig(ctx context.Context) error {
+	log := ctrl.LoggerFrom(ctx)
+	environment := clctx.EnvironmentFrom(ctx)
+	instance := clctx.InstanceFrom(ctx)
 	cluster := environment.Cluster
 	cmd := exec.Command(
 		"clusterctl", "get", "kubeconfig", fmt.Sprintf("%s-cluster", cluster.Name),
 		"--namespace", instance.Namespace,
 	)
-	outFile := fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name)
-	out, err := cmd.Output()
+
+	raw, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("clusterctl failed: %w", err)
+		klog.Infof("kubeconfig %s hasn't prepared", instance.Name)
+		return nil
 	}
-	return os.WriteFile(outFile, out, 0o600)
+
+	cfg, err := clientcmd.Load(raw)
+	if err != nil {
+		log.Error(err, "parse kubeconfig")
+		return err
+	}
+
+	newURL := fmt.Sprintf("https://%s:%s",
+		forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode), nginxport)
+
+	for _, c := range cfg.Clusters {
+		c.Server = newURL
+	}
+
+	updated, err := clientcmd.Write(*cfg)
+	if err != nil {
+		log.Error(err, "encode kubeconfig")
+		return err
+	}
+
+	path := fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name)
+	return os.WriteFile(path, updated, 0o600)
+}
+
+func (r *InstanceReconciler) updatetemplatestatus(ctx context.Context) error {
+	log := ctrl.LoggerFrom(ctx)
+	environment := clctx.EnvironmentFrom(ctx)
+	instance := clctx.InstanceFrom(ctx)
+	cluster := environment.Cluster
+
+	var tmpl clv1alpha2.Template
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      instance.Spec.Template.Name,
+		Namespace: instance.Spec.Template.Namespace,
+	}, &tmpl); err != nil {
+		return err
+	}
+
+	tmpl.Status.KubeConfigs = []clv1alpha2.KubeconfigTemplate{{
+		Name:        fmt.Sprintf("%s-cluster", cluster.Name),
+		FileAddress: fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name),
+	}}
+
+	if err := r.Status().Update(ctx, &tmpl); err != nil {
+		log.Error(err, "failed to update template status")
+		return err
+	}
+	return nil
 }
