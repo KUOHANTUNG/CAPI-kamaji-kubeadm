@@ -28,11 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	// nginxprot -> the nodeport that nginx listening
-	nginxport = "30443"
-)
-
 // InstanceReconciler enforces the Cluster API environment for a CrownLabs instance
 func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
@@ -243,6 +238,7 @@ func KamajiControlPlaneFields(environment *clv1alpha2.Environment, host string) 
 			ServiceType: v1alpha1.ServiceType(environment.Cluster.ServiceType),
 			CertSANs: []string{
 				host,
+				"ingress.local",
 			},
 		},
 		Deployment: controlplanekamajiv1.DeploymentComponent{},
@@ -458,6 +454,7 @@ func ControlPlaneClusterConfiguration(instance *clv1alpha2.Instance, environment
 		APIServer: bootstrapv1.APIServer{
 			CertSANs: []string{
 				host,
+				"ingress.local",
 			},
 		},
 	}
@@ -543,7 +540,7 @@ func (r *InstanceReconciler) insertKubeConfig(ctx context.Context) error {
 	}
 
 	newURL := fmt.Sprintf("https://%s:%s",
-		forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode), nginxport)
+		forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode), environment.Cluster.ClusterNet.NginxPort)
 
 	for _, c := range cfg.Clusters {
 		c.Server = newURL

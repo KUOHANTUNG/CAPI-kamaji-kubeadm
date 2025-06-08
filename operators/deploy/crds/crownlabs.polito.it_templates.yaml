@@ -97,12 +97,20 @@ spec:
                             cni:
                               description: deploy a CNI solution
                               type: string
+                            nginxport:
+                              description: Nginx Port
+                              type: string
+                            nginxtargetport:
+                              description: Nginx targetPort
+                              type: string
                             pods:
                               type: string
                             services:
                               type: string
                           required:
                           - cni
+                          - nginxport
+                          - nginxtargetport
                           - pods
                           - services
                           type: object

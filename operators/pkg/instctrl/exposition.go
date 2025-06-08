@@ -124,7 +124,7 @@ func (r *InstanceReconciler) enforceInstanceExpositionPresence(ctx context.Conte
 				} else {
 					serviceName = fmt.Sprintf("%s-cluster-lb", cluster.Name)
 				}
-				configMap.Data = forge.ConfigMapData(instance, serviceName)
+				configMap.Data = forge.ConfigMapData(instance, serviceName, environment)
 			}
 			configMap.SetLabels(forge.InstanceObjectLabels(configMap.GetLabels(), instance))
 			configMap.SetAnnotations(forge.IngressGUIAnnotations(environment, configMap.GetAnnotations()))

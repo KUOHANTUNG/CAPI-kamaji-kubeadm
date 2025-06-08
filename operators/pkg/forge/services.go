@@ -49,8 +49,6 @@ const (
 	XVncPortName = "xvnc"
 	// MetricsPortName -> the name of the port through which the metrics are exposed.
 	MetricsPortName = "metrics"
-	// nginxprot -> the nodeport that nginx listening
-	nginxport = "30443"
 )
 
 // ServiceSpec forges the specification of a Kubernetes Service resource providing
@@ -99,8 +97,8 @@ func serviceSpecTCPPort(name string, number int32) corev1.ServicePort {
 	}
 }
 
-func ConfigMapData(instance *clv1alpha2.Instance, serviceName string) map[string]string {
+func ConfigMapData(instance *clv1alpha2.Instance, serviceName string, environment *clv1alpha2.Environment) map[string]string {
 	return map[string]string{
-		nginxport: fmt.Sprintf("\"%s/%s:%s\"", instance.Namespace, serviceName, ClusterPortNumber),
+		environment.Cluster.ClusterNet.NginxTargetPort: fmt.Sprintf("%s/%s:%s", instance.Namespace, serviceName, ClusterPortNumber),
 	}
 }

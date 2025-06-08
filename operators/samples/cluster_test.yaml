@@ -70,6 +70,9 @@ spec:
         pods: "10.80.0.0/16"
         services: "10.95.0.0/16"
         cni: calico
+        nginxtargetport: "1234"
+        nginxport: "31443"
+
       controlPlane:
         provider: kamaji
         replicas: 1

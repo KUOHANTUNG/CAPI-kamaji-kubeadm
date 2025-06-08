@@ -173,6 +173,10 @@ type ClusterNetwork struct {
 	Services string `json:"services"`
 	// deploy a CNI solution
 	Cni CniProvider `json:"cni"`
+	// Nginx targetPort
+	NginxTargetPort string `json:"nginxtargetport"`
+	// Nginx Port
+	NginxPort string `json:"nginxport"`
 }
 
 // constrain the provider in callico, cilium and flannel
