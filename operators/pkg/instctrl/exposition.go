@@ -188,5 +188,10 @@ func (r *InstanceReconciler) enforceInstanceExpositionAbsence(ctx context.Contex
 		return err
 	}
 
+	// Enforce configmap absence
+	configMap := v1.ConfigMap{ObjectMeta: forge.ObjectMetaWithSuffix(instance, forge.IngressdashboardPathSuffix)}
+	if err := utils.EnforceObjectAbsence(ctx, r.Client, &configMap, "configmap"); err != nil {
+		return err
+	}
 	return nil
 }

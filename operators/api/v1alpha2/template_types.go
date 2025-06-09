@@ -143,7 +143,7 @@ type Environment struct {
 	NodeSelector *map[string]string `json:"nodeSelector,omitempty"`
 
 	//Cluster
-	Cluster ClusterTemplate `json:"cluster,omitempty"`
+	Cluster *ClusterTemplate `json:"cluster,omitempty"`
 }
 
 // cluster defines the characteristics of a cluster composing the Template.
@@ -164,7 +164,7 @@ type ClusterTemplate struct {
 	Version string `json:"version"`
 
 	// The worker deployment rule sepcifying how to bootstrap
-	MachineDeploy MachineDeployment `json:"machineDeployment,omitempty"`
+	MachineDeploy MachineDeployment `json:"machineDeployment"`
 }
 
 // The ClusterNetwork defines corrlative network components
@@ -177,6 +177,8 @@ type ClusterNetwork struct {
 	NginxTargetPort string `json:"nginxtargetport"`
 	// Nginx Port
 	NginxPort string `json:"nginxport"`
+	// certSAN
+	CertSAN string `json:"certsan,omitempty"`
 }
 
 // constrain the provider in callico, cilium and flannel
@@ -185,7 +187,7 @@ type CniProvider string
 const (
 	CniCalico  CniProvider = "calico"
 	CniCilium  CniProvider = "cilium"
-	CniFlannel CniProvider = "Flannel"
+	CniFlannel CniProvider = "flannel"
 )
 
 // The ControlPlaneRef defines the characteristics of controlplane

@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: tenant-q
+  name: tenant-e
   labels:
     crownlabs.polito.it/operator-selector: local
 ---
@@ -15,7 +15,7 @@ apiVersion: crownlabs.polito.it/v1alpha2
 kind: Instance
 metadata:
   name: green-tea-6831
-  namespace: tenant-q
+  namespace: tenant-e
 spec:
   template.crownlabs.polito.it/TemplateRef:
     name: green-tea
@@ -71,7 +71,7 @@ spec:
         services: "10.95.0.0/16"
         cni: calico
         nginxtargetport: "1234"
-        nginxport: "31443"
+        nginxport: "31343"
 
       controlPlane:
         provider: kamaji

@@ -31,8 +31,6 @@ const (
 	// IngressGUINameSuffix -> the suffix added to the name of the ingress targeting the environment GUI.
 	IngressGUINameSuffix = "gui"
 
-	IngressDashboardSuffix = "dashboard"
-
 	// IngressAppSuffix -> the suffix added to the path of the ingress targeting standalone and container environments.
 	IngressAppSuffix = "app"
 
@@ -190,7 +188,7 @@ func IngressGuiStatusURL(host string, environment *clv1alpha2.Environment, insta
 	case clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM:
 		return fmt.Sprintf("https://%v%v/%v/", host, IngressInstancePrefix, instance.UID)
 	case clv1alpha2.ClassCluster:
-		return fmt.Sprintf("https://%v%v/%v/%v/", host, IngressInstancePrefix, instance.UID, IngressDashboardSuffix)
+		return fmt.Sprintf("https://%v:%v/", host, environment.Cluster.ClusterNet.NginxTargetPort)
 	}
 	return ""
 }
@@ -203,7 +201,7 @@ func IngressGUIName(environment *clv1alpha2.Environment) string {
 	case clv1alpha2.ClassContainer, clv1alpha2.ClassVM, clv1alpha2.ClassCloudVM:
 		return IngressGUINameSuffix
 	case clv1alpha2.ClassCluster:
-		return IngressDashboardSuffix
+		return IngressdashboardPathSuffix
 	}
 	return ""
 }

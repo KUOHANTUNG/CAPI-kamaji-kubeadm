@@ -94,6 +94,9 @@ spec:
                         clusterNet:
                           description: The network of cluster including pods and services
                           properties:
+                            certsan:
+                              description: certSAN
+                              type: string
                             cni:
                               description: deploy a CNI solution
                               type: string
@@ -159,6 +162,7 @@ spec:
                       required:
                       - clusterNet
                       - controlPlane
+                      - machineDeployment
                       - name
                       - version
                       type: object

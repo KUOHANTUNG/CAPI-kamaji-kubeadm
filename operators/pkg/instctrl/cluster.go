@@ -8,7 +8,6 @@ import (
 	"time"
 
 	controlplanekamajiv1 "github.com/clastix/cluster-api-control-plane-provider-kamaji/api/v1alpha1"
-	"github.com/clastix/kamaji/api/v1alpha1"
 	"github.com/netgroup-polito/CrownLabs/operators/api/v1alpha2"
 	clv1alpha2 "github.com/netgroup-polito/CrownLabs/operators/api/v1alpha2"
 	clctx "github.com/netgroup-polito/CrownLabs/operators/pkg/context"
@@ -19,7 +18,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
-	virtv1 "kubevirt.io/api/core/v1"
 	infrav1 "sigs.k8s.io/cluster-api-provider-kubevirt/api/v1alpha1"
 	capiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
@@ -29,11 +27,13 @@ import (
 )
 
 // InstanceReconciler enforces the Cluster API environment for a CrownLabs instance
+// Kubernetes resources required to start a CrownLabs environment.
 func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
 	Provider := environment.Cluster.ControlPlane.Provider
 	r.enforceCluster(ctx)
+	// choose the a proper controlplabe provider
 	if Provider == clv1alpha2.ProviderKubeadm {
 		r.enforceKubeadmInfra(ctx)
 		r.enforceKubeadmControlPlane(ctx)
@@ -41,8 +41,11 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 		r.enforceKamajiInfra(ctx)
 		r.enforceKamajiControlPlane(ctx)
 	}
+	// enforce a machinedeployment for VM management
 	r.enforceMachineDeployment(ctx)
+	// enforce a worker virtual machine template
 	r.enforceKubevirtMachine(ctx)
+	// enforce a boostrap for woker virtual machines
 	r.enforceBootstrap(ctx)
 	// Enforce the service and the ingress to expose the environment.
 	err := r.EnforceInstanceExposition(ctx)
@@ -50,8 +53,9 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 		log.Error(err, "failed to enforce the instance exposition objects")
 		return err
 	}
-	time.Sleep(5 * time.Second)
+	// insert relative KUBECONFIG files into local folder ./kubeconfigs
 	r.insertKubeConfig(ctx)
+	// echo to template status
 	r.updatetemplatestatus(ctx)
 	return nil
 }
@@ -71,7 +75,7 @@ func (r *InstanceReconciler) enforceCluster(ctx context.Context) error {
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, cl, func() error {
 		if cl.CreationTimestamp.IsZero() {
 			// align infrastructure and controlPlane refs
-			cl.Spec = ClusterSpec(instance, environment)
+			cl.Spec = forge.ClusterSpec(instance, environment)
 		}
 		cl.SetLabels(forge.InstanceObjectLabels(cl.GetLabels(), instance))
 		return ctrl.SetControllerReference(instance, cl, r.Scheme)
@@ -104,7 +108,7 @@ func (r *InstanceReconciler) enforceKubeadmInfra(ctx context.Context) error {
 			infra.Labels = map[string]string{}
 		}
 		infra.SetLabels(forge.InstanceObjectLabels(infra.GetLabels(), instance))
-
+		// unnecessary to set contoller ref, all will be managed by cluster
 		return nil
 	})
 	if err != nil {
@@ -161,7 +165,7 @@ func (r *InstanceReconciler) enforceKubeadmControlPlane(ctx context.Context) err
 		if cp.CreationTimestamp.IsZero() {
 			cp.Spec.Version = cluster.Version
 			host := forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode)
-			cp.Spec = ClusterControlPlaneSepc(instance, environment, host)
+			cp.Spec = forge.ClusterControlPlaneSepc(instance, environment, host)
 		}
 		cp.Spec.Replicas = ptr.To(int32(controlplane.Replicas))
 		if cp.Labels == nil {
@@ -194,7 +198,7 @@ func (r *InstanceReconciler) enforceKamajiControlPlane(ctx context.Context) erro
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, cp, func() error {
 		if cp.CreationTimestamp.IsZero() {
 			host := forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode)
-			cp.Spec = KamajiControlPlaneSpec(environment, host)
+			cp.Spec = forge.KamajiControlPlaneSpec(environment, host)
 		}
 		cp.Spec.Replicas = ptr.To(int32(controlplane.Replicas))
 		if cp.Labels == nil {
@@ -210,40 +214,6 @@ func (r *InstanceReconciler) enforceKamajiControlPlane(ctx context.Context) erro
 	log.V(utils.FromResult(res)).Info("ControlPlane enforced", "cp", klog.KObj(cp), "result", res)
 	return nil
 }
-func KamajiControlPlaneSpec(environment *clv1alpha2.Environment, host string) controlplanekamajiv1.KamajiControlPlaneSpec {
-	return controlplanekamajiv1.KamajiControlPlaneSpec{
-		KamajiControlPlaneFields: KamajiControlPlaneFields(environment, host),
-		Replicas:                 ptr.To(int32(environment.Cluster.ControlPlane.Replicas)),
-		Version:                  environment.Cluster.Version,
-	}
-}
-
-func KamajiControlPlaneFields(environment *clv1alpha2.Environment, host string) controlplanekamajiv1.KamajiControlPlaneFields {
-	return controlplanekamajiv1.KamajiControlPlaneFields{
-		DataStoreName: "default",
-		Addons: controlplanekamajiv1.AddonsSpec{
-			AddonsSpec: v1alpha1.AddonsSpec{
-				CoreDNS:   ptr.To(v1alpha1.AddonSpec{}),
-				KubeProxy: ptr.To(v1alpha1.AddonSpec{}),
-			},
-		},
-		Kubelet: v1alpha1.KubeletSpec{
-			CGroupFS: v1alpha1.CGroupDriver("systemd"),
-			PreferredAddressTypes: []v1alpha1.KubeletPreferredAddressType{
-				"InternalIP",
-				"ExternalIP",
-			},
-		},
-		Network: controlplanekamajiv1.NetworkComponent{
-			ServiceType: v1alpha1.ServiceType(environment.Cluster.ServiceType),
-			CertSANs: []string{
-				host,
-				"ingress.local",
-			},
-		},
-		Deployment: controlplanekamajiv1.DeploymentComponent{},
-	}
-}
 
 // enforceMachineDeployment creates or updates the MachineDeployment and labels it
 func (r *InstanceReconciler) enforceMachineDeployment(ctx context.Context) error {
@@ -258,7 +228,7 @@ func (r *InstanceReconciler) enforceMachineDeployment(ctx context.Context) error
 	res, err := ctrl.CreateOrUpdate(ctx, r.Client, md, func() error {
 		if md.CreationTimestamp.IsZero() {
 			md.Spec.ClusterName = fmt.Sprintf("%s-cluster", cluster.Name)
-			md.Spec.Template.Spec = MachineDeploymentSepc(instance, environment)
+			md.Spec.Template.Spec = forge.MachineDeploymentSepc(instance, environment)
 		}
 		md.Spec.Replicas = ptr.To(int32(machinedeployment.Replicas))
 		if md.Labels == nil {
@@ -289,7 +259,7 @@ func (r *InstanceReconciler) enforceKubevirtMachine(ctx context.Context) error {
 		if wmworker.CreationTimestamp.IsZero() {
 			wmworker.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"
 
-			vmSpec := ClusterVMSpec(environment)
+			vmSpec := forge.ClusterVMSpec(environment)
 			wmworker.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
 		}
 		if wmworker.Labels == nil {
@@ -312,7 +282,7 @@ func (r *InstanceReconciler) enforceKubevirtMachine(ctx context.Context) error {
 			if wmcp.CreationTimestamp.IsZero() {
 				wmcp.Spec.Template.Spec.BootstrapCheckSpec.CheckStrategy = "ssh"
 
-				vmSpec := ClusterVMSpec(environment)
+				vmSpec := forge.ClusterVMSpec(environment)
 				wmcp.Spec.Template.Spec.VirtualMachineTemplate.Spec = vmSpec
 			}
 
@@ -360,168 +330,16 @@ func (r *InstanceReconciler) enforceBootstrap(ctx context.Context) error {
 	return nil
 }
 
-func ClusterVMSpec(environment *clv1alpha2.Environment) virtv1.VirtualMachineSpec {
-
-	return virtv1.VirtualMachineSpec{
-		RunStrategy: ptr.To(virtv1.RunStrategyAlways),
-		Template: &virtv1.VirtualMachineInstanceTemplateSpec{
-			Spec: ClusterVMISpec(environment),
-		},
-	}
-}
-func ClusterVMISpec(environment *clv1alpha2.Environment) virtv1.VirtualMachineInstanceSpec {
-	return virtv1.VirtualMachineInstanceSpec{
-		Domain: ClusterVMDomain(environment),
-		Volumes: []virtv1.Volume{
-			{
-				Name: "containervolume",
-				VolumeSource: virtv1.VolumeSource{
-					ContainerDisk: &virtv1.ContainerDiskSource{
-						Image: environment.Image,
-					},
-				},
-			},
-		},
-		EvictionStrategy: ptr.To(virtv1.EvictionStrategyExternal),
-	}
-}
-
-func ClusterVMDomain(environment *clv1alpha2.Environment) virtv1.DomainSpec {
-	return virtv1.DomainSpec{
-		CPU:       &virtv1.CPU{Cores: environment.Resources.CPU},
-		Memory:    &virtv1.Memory{Guest: &environment.Resources.Memory},
-		Resources: forge.VirtualMachineResources(environment),
-		Devices: virtv1.Devices{
-			NetworkInterfaceMultiQueue: ptr.To(true),
-			Disks:                      []virtv1.Disk{forge.VolumeDiskTarget("containervolume")},
-		},
-	}
-}
-
-func MachineDeploymentSepc(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) capiv1.MachineSpec {
-	return capiv1.MachineSpec{
-		ClusterName: fmt.Sprintf("%s-cluster", environment.Cluster.Name),
-		Version:     ptr.To(environment.Cluster.Version),
-		Bootstrap: capiv1.Bootstrap{
-			ConfigRef: ptr.To(BootstrapConfigRef(instance, environment)),
-		},
-		InfrastructureRef: MachineInfrastructureRef(instance, environment, fmt.Sprintf("%s-md-worker", environment.Cluster.Name)),
-	}
-}
-
-func BootstrapConfigRef(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) corev1.ObjectReference {
-	return corev1.ObjectReference{
-		Name:       fmt.Sprintf("%s-md-bootstrap", environment.Cluster.Name),
-		Namespace:  instance.Namespace,
-		APIVersion: "bootstrap.cluster.x-k8s.io/v1beta1",
-		Kind:       "KubeadmConfigTemplate",
-	}
-}
-
-func MachineInfrastructureRef(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment, Name string) corev1.ObjectReference {
-	return corev1.ObjectReference{
-		Name:       Name,
-		Namespace:  instance.Namespace,
-		APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha1",
-		Kind:       "KubevirtMachineTemplate",
-	}
-}
-
-func ClusterControlPlaneSepc(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment, host string) controlplanev1.KubeadmControlPlaneSpec {
-	return controlplanev1.KubeadmControlPlaneSpec{
-		MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
-			InfrastructureRef: MachineInfrastructureRef(instance, environment, fmt.Sprintf("%s-control-plane-machine", environment.Cluster.Name)),
-		},
-		KubeadmConfigSpec: ControlPlaneKubeadmConfigSpec(instance, environment, host),
-		Version:           environment.Cluster.Version,
-	}
-}
-func ControlPlaneKubeadmConfigSpec(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment, host string) bootstrapv1.KubeadmConfigSpec {
-	return bootstrapv1.KubeadmConfigSpec{
-		ClusterConfiguration: ptr.To(ControlPlaneClusterConfiguration(instance, environment, host)),
-		InitConfiguration: ptr.To(bootstrapv1.InitConfiguration{
-			NodeRegistration: bootstrapv1.NodeRegistrationOptions{CRISocket: "/var/run/containerd/containerd.sock"},
-		}),
-		JoinConfiguration: ptr.To(bootstrapv1.JoinConfiguration{
-			NodeRegistration: bootstrapv1.NodeRegistrationOptions{CRISocket: "/var/run/containerd/containerd.sock"},
-		}),
-	}
-}
-
-func ControlPlaneClusterConfiguration(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment, host string) bootstrapv1.ClusterConfiguration {
-	return bootstrapv1.ClusterConfiguration{
-		Networking: ControlPlaneNetworking(instance, environment),
-		APIServer: bootstrapv1.APIServer{
-			CertSANs: []string{
-				host,
-				"ingress.local",
-			},
-		},
-	}
-}
-
-func ControlPlaneNetworking(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) bootstrapv1.Networking {
-	return bootstrapv1.Networking{
-		DNSDomain:     fmt.Sprintf("%s.%s.local", environment.Cluster.Name, instance.Namespace),
-		PodSubnet:     environment.Cluster.ClusterNet.Pods,
-		ServiceSubnet: environment.Cluster.ClusterNet.Services,
-	}
-}
-
-func ClusterSpec(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment) capiv1.ClusterSpec {
-	Provider := environment.Cluster.ControlPlane.Provider
-	if Provider == clv1alpha2.ProviderKubeadm {
-		return capiv1.ClusterSpec{
-			ClusterNetwork: ptr.To(ClusterNetworking(environment)),
-			InfrastructureRef: ptr.To(corev1.ObjectReference{
-				APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha1",
-				Kind:       "KubevirtCluster",
-				Name:       fmt.Sprintf("%s-infra", environment.Cluster.Name),
-				Namespace:  instance.Namespace,
-			}),
-			ControlPlaneRef: ptr.To(corev1.ObjectReference{
-				APIVersion: "controlplane.cluster.x-k8s.io/v1beta1",
-				Kind:       "KubeadmControlPlane",
-				Name:       fmt.Sprintf("%s-control-plane", environment.Cluster.Name),
-				Namespace:  instance.Namespace,
-			}),
-		}
-	} else {
-		return capiv1.ClusterSpec{
-			ClusterNetwork: ptr.To(ClusterNetworking(environment)),
-			InfrastructureRef: ptr.To(corev1.ObjectReference{
-				APIVersion: "infrastructure.cluster.x-k8s.io/v1alpha1",
-				Kind:       "KubevirtCluster",
-				Name:       fmt.Sprintf("%s-infra", environment.Cluster.Name),
-				Namespace:  instance.Namespace,
-			}),
-			ControlPlaneRef: ptr.To(corev1.ObjectReference{
-				APIVersion: "controlplane.cluster.x-k8s.io/v1alpha1",
-				Kind:       "KamajiControlPlane",
-				Name:       fmt.Sprintf("%s-control-plane", environment.Cluster.Name),
-				Namespace:  instance.Namespace,
-			}),
-		}
-	}
-
-}
-
-func ClusterNetworking(environment *clv1alpha2.Environment) capiv1.ClusterNetwork {
-	return capiv1.ClusterNetwork{
-		Pods: ptr.To(capiv1.NetworkRanges{
-			CIDRBlocks: []string{environment.Cluster.ClusterNet.Pods},
-		}),
-		Services: ptr.To(capiv1.NetworkRanges{
-			CIDRBlocks: []string{environment.Cluster.ClusterNet.Services},
-		}),
-	}
-}
-
+// insertKubeConfig export the KUBECONFIG into kubeconfig folders
 func (r *InstanceReconciler) insertKubeConfig(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
 	instance := clctx.InstanceFrom(ctx)
 	cluster := environment.Cluster
+	path := fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name)
+
+	time.Sleep(30 * time.Second)
+
 	cmd := exec.Command(
 		"clusterctl", "get", "kubeconfig", fmt.Sprintf("%s-cluster", cluster.Name),
 		"--namespace", instance.Namespace,
@@ -551,11 +369,11 @@ func (r *InstanceReconciler) insertKubeConfig(ctx context.Context) error {
 		log.Error(err, "encode kubeconfig")
 		return err
 	}
-
-	path := fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name)
 	return os.WriteFile(path, updated, 0o600)
+
 }
 
+// update the template status with the address of  relative kubeconfig file
 func (r *InstanceReconciler) updatetemplatestatus(ctx context.Context) error {
 	log := ctrl.LoggerFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
