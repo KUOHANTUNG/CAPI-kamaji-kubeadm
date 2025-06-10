@@ -3,9 +3,6 @@ package instctrl
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"time"
 
 	controlplanekamajiv1 "github.com/clastix/cluster-api-control-plane-provider-kamaji/api/v1alpha1"
 	"github.com/netgroup-polito/CrownLabs/operators/api/v1alpha2"
@@ -15,7 +12,7 @@ import (
 	"github.com/netgroup-polito/CrownLabs/operators/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/clientcmd"
+
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	infrav1 "sigs.k8s.io/cluster-api-provider-kubevirt/api/v1alpha1"
@@ -32,6 +29,8 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 	log := ctrl.LoggerFrom(ctx)
 	environment := clctx.EnvironmentFrom(ctx)
 	Provider := environment.Cluster.ControlPlane.Provider
+	instance := clctx.InstanceFrom(ctx)
+	host := forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode)
 	r.enforceCluster(ctx)
 	// choose the a proper controlplabe provider
 	if Provider == clv1alpha2.ProviderKubeadm {
@@ -53,8 +52,8 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 		log.Error(err, "failed to enforce the instance exposition objects")
 		return err
 	}
-	// insert relative KUBECONFIG files into local folder ./kubeconfigs
-	r.insertKubeConfig(ctx)
+	// install cni and export kubeconfig
+	forge.Insinstallcni(instance, environment, host)
 	// echo to template status
 	r.updatetemplatestatus(ctx)
 	return nil
@@ -331,47 +330,6 @@ func (r *InstanceReconciler) enforceBootstrap(ctx context.Context) error {
 }
 
 // insertKubeConfig export the KUBECONFIG into kubeconfig folders
-func (r *InstanceReconciler) insertKubeConfig(ctx context.Context) error {
-	log := ctrl.LoggerFrom(ctx)
-	environment := clctx.EnvironmentFrom(ctx)
-	instance := clctx.InstanceFrom(ctx)
-	cluster := environment.Cluster
-	path := fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name)
-
-	time.Sleep(30 * time.Second)
-
-	cmd := exec.Command(
-		"clusterctl", "get", "kubeconfig", fmt.Sprintf("%s-cluster", cluster.Name),
-		"--namespace", instance.Namespace,
-	)
-
-	raw, err := cmd.Output()
-	if err != nil {
-		klog.Infof("kubeconfig %s hasn't prepared", instance.Name)
-		return nil
-	}
-
-	cfg, err := clientcmd.Load(raw)
-	if err != nil {
-		log.Error(err, "parse kubeconfig")
-		return err
-	}
-
-	newURL := fmt.Sprintf("https://%s:%s",
-		forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode), environment.Cluster.ClusterNet.NginxPort)
-
-	for _, c := range cfg.Clusters {
-		c.Server = newURL
-	}
-
-	updated, err := clientcmd.Write(*cfg)
-	if err != nil {
-		log.Error(err, "encode kubeconfig")
-		return err
-	}
-	return os.WriteFile(path, updated, 0o600)
-
-}
 
 // update the template status with the address of  relative kubeconfig file
 func (r *InstanceReconciler) updatetemplatestatus(ctx context.Context) error {
