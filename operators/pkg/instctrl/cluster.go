@@ -31,6 +31,9 @@ func (r *InstanceReconciler) EnforceClusterEnvironment(ctx context.Context) erro
 	Provider := environment.Cluster.ControlPlane.Provider
 	instance := clctx.InstanceFrom(ctx)
 	host := forge.HostName(r.ServiceUrls.WebsiteBaseURL, environment.Mode)
+	if environment.Cluster.Visulizer.Isvisualizer {
+		forge.ClusterVisulizer(ctx)
+	}
 	r.enforceCluster(ctx)
 	// choose the a proper controlplabe provider
 	if Provider == clv1alpha2.ProviderKubeadm {

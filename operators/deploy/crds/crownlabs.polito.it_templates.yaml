@@ -159,6 +159,21 @@ spec:
                         version:
                           description: The version of kubernetes used in cluster
                           type: string
+                        visulizer:
+                          description: The Visualizer is used to visualization of
+                            cluster
+                          properties:
+                            isvisualizer:
+                              description: Isvisualizer is flag whether turn on
+                              type: boolean
+                            visulizerNamespace:
+                              description: VisulizerNamespace is the namespace of
+                                visual controler
+                              type: string
+                            visulizerPort:
+                              description: VisulizerPort is the port that expose outside
+                              type: string
+                          type: object
                       required:
                       - clusterNet
                       - controlPlane

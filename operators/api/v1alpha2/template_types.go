@@ -165,6 +165,19 @@ type ClusterTemplate struct {
 
 	// The worker deployment rule sepcifying how to bootstrap
 	MachineDeploy MachineDeployment `json:"machineDeployment"`
+
+	// The Visualizer is used to visualization of cluster
+	Visulizer *VisualizationType `json:"visulizer,omitempty"`
+}
+
+// The VisualizationType defines the visual content
+type VisualizationType struct {
+	// VisulizerNamespace is the namespace of visual controler
+	VisulizerNamespace string `json:"visulizerNamespace,omitempty"`
+	// VisulizerPort is the port that expose outside
+	VisulizerPort string `json:"visulizerPort,omitempty"`
+	// Isvisualizer is flag whether turn on
+	Isvisualizer bool `json:"isvisualizer,omitempty"`
 }
 
 // The ClusterNetwork defines corrlative network components
