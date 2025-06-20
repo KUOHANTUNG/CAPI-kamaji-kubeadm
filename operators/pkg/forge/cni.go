@@ -12,7 +12,7 @@ import (
 func insertKubeConfig(instance *clv1alpha2.Instance, environment *clv1alpha2.Environment, host string) error {
 
 	cluster := environment.Cluster
-	path := fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name)
+	path := fmt.Sprintf("./kubeconfigs/%s-instance.kubeconfig", instance.Name)
 
 	cmd := exec.Command(
 		"clusterctl", "get", "kubeconfig", fmt.Sprintf("%s-cluster", cluster.Name),
@@ -41,7 +41,7 @@ func Insinstallcni(instance *clv1alpha2.Instance, environment *clv1alpha2.Enviro
 	namespace := instance.Namespace
 	cni := cluster.ClusterNet.Cni
 	podCIDR := cluster.ClusterNet.Pods
-	kubeconfigPath := fmt.Sprintf("./kubeconfigs/%s-cluster.kubeconfig", cluster.Name)
+	kubeconfigPath := fmt.Sprintf("./kubeconfigs/%s-instance.kubeconfig", instance.Name)
 	// "Waiting for cluster to be ready"
 	exec.Command(
 		"kubectl", "wait",

@@ -144,6 +144,9 @@ type Environment struct {
 
 	//Cluster
 	Cluster *ClusterTemplate `json:"cluster,omitempty"`
+
+	// The Visualizer is used to visualization of cluster
+	Visulizer *VisualizationType `json:"visulizer,omitempty"`
 }
 
 // cluster defines the characteristics of a cluster composing the Template.
@@ -165,15 +168,10 @@ type ClusterTemplate struct {
 
 	// The worker deployment rule sepcifying how to bootstrap
 	MachineDeploy MachineDeployment `json:"machineDeployment"`
-
-	// The Visualizer is used to visualization of cluster
-	Visulizer *VisualizationType `json:"visulizer,omitempty"`
 }
 
 // The VisualizationType defines the visual content
 type VisualizationType struct {
-	// VisulizerNamespace is the namespace of visual controler
-	VisulizerNamespace string `json:"visulizerNamespace,omitempty"`
 	// VisulizerPort is the port that expose outside
 	VisulizerPort string `json:"visulizerPort,omitempty"`
 	// Isvisualizer is flag whether turn on
