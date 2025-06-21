@@ -23,7 +23,7 @@ func insertKubeConfig(instance *clv1alpha2.Instance, environment *clv1alpha2.Env
 
 	cfg, _ := clientcmd.Load(raw)
 
-	newURL := fmt.Sprintf("https://%s:%s",
+	newURL := fmt.Sprintf("https://%s:%d",
 		host, environment.Cluster.ClusterNet.NginxPort)
 
 	for _, c := range cfg.Clusters {
